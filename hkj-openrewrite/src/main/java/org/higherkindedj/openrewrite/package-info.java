@@ -40,8 +40,9 @@
  * <p>Rewrites usages of APIs deprecated for removal in 0.5.0 to their replacements, removes a
  * deprecated annotation that has no effect, replaces two deprecated {@code @PathSource}
  * capabilities with the levels they generate, and drops the {@code Monad} argument that {@code
- * StateT} no longer takes. The recipes match the 0.4.x signatures, so run them from this module's
- * 0.5.0 release before the project moves to 0.5.0.
+ * StateT} no longer takes. Adds to {@code @GenerateFocus}'s {@code widenFields} each container a
+ * 0.4.x navigator stepped into. The recipes match the 0.4.x signatures, so run them from this
+ * module's 0.5.0 release before the project moves to 0.5.0.
  *
  * <ul>
  *   <li>{@code org.higherkindedj.openrewrite.MigrateDeprecationsTo0_5_0} - Runs all 0.5.0
@@ -58,6 +59,37 @@
  *       {@code EFFECTFUL} to {@code CHAINABLE} and {@code ACCUMULATING} to {@code RECOVERABLE}
  *   <li>{@code org.higherkindedj.openrewrite.RemoveStateTMonadArgument} - Drops the {@code Monad}
  *       argument from {@code StateT} construction and {@code StateT.mapT}
+ *   <li>{@code org.higherkindedj.openrewrite.AddWidenFieldsForNavigatedContainersRecipe} - Adds to
+ *       {@code widenFields} each {@code Map} or third-party collection of {@code @GenerateFocus}
+ *       records that a 0.4.x navigator stepped into, marking one whose elements have a field named
+ *       like a path method
+ * </ul>
+ *
+ * <h2>0.6.0 Deprecation Migration</h2>
+ *
+ * <p>Rewrites usages of APIs deprecated in 0.5.0 for removal in 0.6.0 to their replacements. The
+ * recipes match the deprecated signatures, so run them from this module's 0.5.x release before the
+ * project moves to 0.6.0.
+ *
+ * <ul>
+ *   <li>{@code org.higherkindedj.openrewrite.MigrateDeprecationsTo0_6_0} - Runs all 0.6.0
+ *       deprecation migrations
+ *   <li>{@code org.higherkindedj.openrewrite.ReplaceUntypedPathShortcutsRecipe} - A Focus path's
+ *       untyped shortcuts, such as {@code each()} and {@code some()}, to their typed forms, such as
+ *       {@code each(EachInstances.listEach())} and {@code some(FocusPaths.optionalSome())}
+ * </ul>
+ *
+ * <h2>0.6.0 Path Family</h2>
+ *
+ * <p>Adds the Path family that 0.6.0's capability interfaces take as their first type parameter to
+ * code that names one. Run it from this module's 0.6.0 release, before or after the project moves
+ * to 0.6.0.
+ *
+ * <ul>
+ *   <li>{@code org.higherkindedj.openrewrite.AddPathFamily} - Runs the recipe below
+ *   <li>{@code org.higherkindedj.openrewrite.AddPathFamilyToCapabilityTypesRecipe} - {@code
+ *       Chainable<A>} to {@code Chainable<?, A>}, and likewise {@code Combinable}, {@code
+ *       Effectful}, {@code Recoverable} and {@code Accumulating}
  * </ul>
  *
  * <h2>Usage</h2>

@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE.md in the project root for license information.
 package org.higherkindedj.checker;
 
+import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -43,8 +44,12 @@ public final class DiagnosticMessages {
    */
   public static String pathTypeMismatch(String methodName, String expectedType, String actualType) {
     String base =
-        "Path type mismatch in %s(): expected %s but received %s. "
-                .formatted(methodName, expectedType, actualType)
+        String.format(
+                Locale.ROOT,
+                "Path type mismatch in %s(): expected %s but received %s. ",
+                methodName,
+                expectedType,
+                actualType)
             + "Each Path type can only chain with the same type.";
 
     Optional<String> conversion = PathTypeRegistry.suggestedConversion(actualType, expectedType);
@@ -70,9 +75,10 @@ public final class DiagnosticMessages {
     String example =
         writerT
             ? "new WriterTMonad<>(someOuterMonad, outputMonoid)"
-            : "new %s<>(someOuterMonad)".formatted(simpleName);
+            : String.format(Locale.ROOT, "new %s<>(someOuterMonad)", simpleName);
     String body =
-        "%s needs the outer Monad<F> instance, e.g. %s. ".formatted(simpleName, example)
+        String.format(
+                Locale.ROOT, "%s needs the outer Monad<F> instance, e.g. %s. ", simpleName, example)
             + "Every transformer wraps an outer effect and cannot infer it"
             + (writerT ? "; WriterTMonad also needs a Monoid<W> for the accumulated output." : ".");
     return withDocLink(body, "transformers/common_errors.html");
@@ -97,8 +103,10 @@ public final class DiagnosticMessages {
         (missingHandleError && missingAp)
             ? "Free.HandleError and Free.Ap cases"
             : missingHandleError ? "Free.HandleError case" : "Free.Ap case";
-    return "This switch over Free is missing the %s. Free has variants Pure, Suspend, FlatMapped, "
-            .formatted(missing)
+    return String.format(
+            Locale.ROOT,
+            "This switch over Free is missing the %s. Free has variants Pure, Suspend, FlatMapped, ",
+            missing)
         + "HandleError (error recovery) and Ap (applicative); an interpreter must handle them all.";
   }
 
@@ -120,34 +128,87 @@ public final class DiagnosticMessages {
    */
   public static String discardedEffect(String typeName) {
     String body =
-        ("This %s is built but never used: it describes work that has not run. "
+        String.format(
+            Locale.ROOT,
+            "This %s is built but never used: it describes work that has not run. "
                 + "Assign it, return it, pass it on, or run it (e.g. unsafeRun()/an interpreter) — "
-                + "as a bare statement it is a silent no-op.")
-            .formatted(typeName);
+                + "as a bare statement it is a silent no-op.",
+            typeName);
     return withDocLink(body, "effect/capabilities.html");
   }
 
   /**
-   * Formats the diagnostic for a silently-erased error-type mismatch in an error-typed Path chain.
-   *
-   * <p>{@code via}/{@code flatMap}/{@code then}/{@code zipWith} bind the next step to {@code
-   * Chainable<B>}, which does not carry the error type. A step whose error type {@code E} differs
-   * from the receiver's therefore compiles, and the wrong {@code E} is carried at runtime (latent
-   * {@code ClassCastException} when the error is consumed). There is no javac error here — without
-   * this check the mismatch is entirely silent.
+   * Formats the note for a step whose error shares a supertype with a chain typed too narrowly: the
+   * fix is to type the chain on the supertype where it is typed.
    *
    * @param methodName the chain method (e.g. "via")
-   * @param receiverE the receiver's error type, simple name
-   * @param stepE the offending step's error type, simple name
+   * @param chainE the chain's error type, simple name
+   * @param stepE the step's error type, simple name
+   * @param supertype the most specific supertype of both, simple name
+   * @param witness what to write where the chain is typed (e.g. {@code .<OrderError>mapError(...)})
    * @return a formatted message
    */
-  public static String errorTypeMismatch(String methodName, String receiverE, String stepE) {
+  public static String errorTypeNarrowChain(
+      String methodName, String chainE, String stepE, String supertype, String witness) {
     String body =
-        ("Error type is silently mismatched in %s(): the chain carries E=%s but this step yields "
-                + "E=%s, which is not assignable to %s. The chain erases E through Chainable<B>, so "
-                + "the wrong error type is carried at runtime (latent ClassCastException). Use the "
-                + "same error type across the chain, or mapError at the boundary.")
-            .formatted(methodName, receiverE, stepE, receiverE);
+        String.format(
+            Locale.ROOT,
+            "Error type mismatch in %s(): the chain is typed on %s, and this step fails with %s. "
+                + "Type the chain on %s where it is typed: write %s.",
+            methodName,
+            chainE,
+            stepE,
+            supertype,
+            witness);
+    return withDocLink(body, "effect/compiler_errors.html");
+  }
+
+  /**
+   * Formats the note for a step typed on a catch-all such as {@code Object}, because nothing gave
+   * its own chain an error type: the fix is to type it on the chain's error where it starts.
+   *
+   * @param methodName the chain method (e.g. "via")
+   * @param stepE the step's error type, simple name
+   * @param chainE the chain's error type, simple name
+   * @param witness what to write where the step's chain starts (e.g. {@code Path.<OrderError,
+   *     Order>right(...)}), or {@code null} when the start cannot be named
+   * @return a formatted message
+   */
+  public static String errorTypeUntypedStep(
+      String methodName, String stepE, String chainE, String witness) {
+    String body =
+        String.format(
+            Locale.ROOT,
+            "Error type mismatch in %s(): this step is typed on %s, because nothing gave its "
+                + "chain an error type. Type it on %s where it starts%s.",
+            methodName,
+            stepE,
+            chainE,
+            witness == null ? "" : ": write " + witness);
+    return withDocLink(body, "effect/compiler_errors.html");
+  }
+
+  /**
+   * Formats the note for a step whose error type is unrelated to the chain's: the fix is to map the
+   * step's error into the chain's.
+   *
+   * @param methodName the chain method (e.g. "via")
+   * @param stepE the step's error type, simple name
+   * @param chainE the chain's error type, simple name
+   * @param mapping the method that maps the step's error (e.g. ".mapError(...)")
+   * @return a formatted message
+   */
+  public static String errorTypeUnrelatedStep(
+      String methodName, String stepE, String chainE, String mapping) {
+    String body =
+        String.format(
+            Locale.ROOT,
+            "Error type mismatch in %s(): this step fails with %s, which does not extend %s. "
+                + "Map it into the chain's error type inside the step, with %s.",
+            methodName,
+            stepE,
+            chainE,
+            mapping);
     return withDocLink(body, "effect/compiler_errors.html");
   }
 
@@ -186,13 +247,18 @@ public final class DiagnosticMessages {
   public static String witnessArity(boolean typeVariable, String witnessName) {
     String body =
         typeVariable
-            ? ("Type parameter %s is used as a higher-kinded witness but is not "
+            ? String.format(
+                Locale.ROOT,
+                "Type parameter %s is used as a higher-kinded witness but is not "
                     + "WitnessArity-bounded. Bound it: <%s extends WitnessArity<TypeArity.Unary>> "
-                    + "(use TypeArity.Binary for Kind2).")
-                .formatted(witnessName, witnessName)
-            : ("%s is used as a higher-kinded witness but does not implement WitnessArity. Add "
-                    + "'implements WitnessArity<TypeArity.Unary>' (use TypeArity.Binary for Kind2).")
-                .formatted(witnessName);
+                    + "(use TypeArity.Binary for Kind2).",
+                witnessName,
+                witnessName)
+            : String.format(
+                Locale.ROOT,
+                "%s is used as a higher-kinded witness but does not implement WitnessArity. Add "
+                    + "'implements WitnessArity<TypeArity.Unary>' (use TypeArity.Binary for Kind2).",
+                witnessName);
     return body;
   }
 
@@ -207,10 +273,14 @@ public final class DiagnosticMessages {
    * @return a formatted advisory message
    */
   public static String rawKind(String kindName) {
-    return ("Raw %s drops its witness type argument — the one way to reach a wrong-witness narrow() "
+    return String.format(
+        Locale.ROOT,
+        "Raw %s drops its witness type argument — the one way to reach a wrong-witness narrow() "
             + "that compiles but throws KindUnwrapException at runtime. Parameterise it: "
-            + "%s<XKind.Witness, A> (use %s<XKind.Witness, E, A> for Kind2).")
-        .formatted(kindName, kindName, kindName);
+            + "%s<XKind.Witness, A> (use %s<XKind.Witness, E, A> for Kind2).",
+        kindName,
+        kindName,
+        kindName);
   }
 
   /**
@@ -228,10 +298,14 @@ public final class DiagnosticMessages {
    */
   public static String viaNonPath(String methodName, String returnTypeName) {
     String body =
-        ("%s() needs a function that returns a Path, but this one returns %s. For a plain "
+        String.format(
+            Locale.ROOT,
+            "%s() needs a function that returns a Path, but this one returns %s. For a plain "
                 + "transformation use map() instead; use %s() only when the function itself "
-                + "returns a Path.")
-            .formatted(methodName, returnTypeName, methodName);
+                + "returns a Path.",
+            methodName,
+            returnTypeName,
+            methodName);
     return withDocLink(body, "effect/compiler_errors.html");
   }
 
@@ -249,10 +323,14 @@ public final class DiagnosticMessages {
    */
   public static String mapNestsEffect(String pathType) {
     String body =
-        ("map() here nests the effect: the function returns %s, so the result is a %s of %s. "
+        String.format(
+            Locale.ROOT,
+            "map() here nests the effect: the function returns %s, so the result is a %s of %s. "
                 + "map() is for plain A->B transformations; to chain a Path-returning function use "
-                + "via() (the Path flatMap) instead.")
-            .formatted(pathType, pathType, pathType);
+                + "via() (the Path flatMap) instead.",
+            pathType,
+            pathType,
+            pathType);
     return withDocLink(body, "effect/compiler_errors.html");
   }
 
@@ -267,9 +345,11 @@ public final class DiagnosticMessages {
    * @return a formatted message
    */
   public static String rawFreeConstruction(String method) {
-    return ("Free.%s(...) works, but the FreePath fluent API or the generated *Ops smart "
-            + "constructors are more ergonomic and type-safe for composing Free programs.")
-        .formatted(method);
+    return String.format(
+        Locale.ROOT,
+        "Free.%s(...) works, but the FreePath fluent API or the generated *Ops smart "
+            + "constructors are more ergonomic and type-safe for composing Free programs.",
+        method);
   }
 
   /**
@@ -283,8 +363,10 @@ public final class DiagnosticMessages {
    * @return a formatted message
    */
   public static String injectBoilerplate(String method) {
-    return ("InjectInstances.%s(...) works, but @ComposeEffects with its generated Support class "
-            + "removes this boilerplate and ensures correct EitherF nesting.")
-        .formatted(method);
+    return String.format(
+        Locale.ROOT,
+        "InjectInstances.%s(...) works, but @ComposeEffects with its generated Support class "
+            + "removes this boilerplate and ensures correct EitherF nesting.",
+        method);
   }
 }

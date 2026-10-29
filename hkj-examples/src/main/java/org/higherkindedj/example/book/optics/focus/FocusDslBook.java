@@ -24,6 +24,7 @@ import org.higherkindedj.optics.annotations.GenerateFocus;
 import org.higherkindedj.optics.each.EachInstances;
 import org.higherkindedj.optics.focus.AffinePath;
 import org.higherkindedj.optics.focus.FocusPath;
+import org.higherkindedj.optics.focus.FocusPaths;
 import org.higherkindedj.optics.focus.TraversalPath;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;
@@ -162,8 +163,8 @@ public final class FocusDslBook {
     // A plain value: read and write it
     FocusPath<Basket, String> reference = BasketFocus.reference();
 
-    // A List, Set or Collection: already on the elements, so the next hop is .via(...)
-    TraversalPath<Basket, Integer> quantities = BasketFocus.lines().via(LineItemFocus.quantity());
+    // A List, Set or Collection of records: a navigator already on the elements
+    TraversalPath<Basket, Integer> quantities = BasketFocus.lines().quantity();
 
     // An Optional, or a component with a recognised @Nullable: zero or one
     AffinePath<Basket, String> giftMessage = BasketFocus.giftMessage();
@@ -172,8 +173,8 @@ public final class FocusDslBook {
     // A reference that may hold null, with no annotation: say so with .nullable()
     AffinePath<Basket, String> legacyNote = BasketFocus.legacyNote().nullable();
 
-    // A Map: the path focuses the whole map, and .atKey(k) picks one value
-    AffinePath<Basket, String> channel = BasketFocus.attributes().atKey("channel");
+    // A Map: the path focuses the whole map, and mapAt(k) picks one value
+    AffinePath<Basket, String> channel = BasketFocus.attributes().via(FocusPaths.mapAt("channel"));
 
     // An array: the path focuses the whole array, and .each(...) steps into it
     TraversalPath<Basket, String> tags = BasketFocus.tags().each(EachInstances.arrayEach());

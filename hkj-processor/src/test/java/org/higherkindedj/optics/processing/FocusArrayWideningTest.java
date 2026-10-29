@@ -175,7 +175,7 @@ class FocusArrayWideningTest {
           "HolderFocus | TraversalPath<Holder, String> grid()",
           "HolderFocus | TraversalPath<Holder, String> rows()",
           "HolderFocus | TraversalPath<Holder, String> extra()",
-          "HolderFocus | TraversalPath<Holder, Leaf> groups()",
+          "HolderFocus | GroupsNavigator<Holder> groups()",
           "HolderFocus | FocusPath<Holder, int[]> counts()",
           "BagFocus | <T> TraversalPath<Bag<T>, T> items()",
           "PlainFocus | FocusPath<Plain, String[]> tags()",
@@ -192,7 +192,7 @@ class FocusArrayWideningTest {
     }
 
     @Test
-    @DisplayName("an array widens through arrayEach, after a type witness where one is needed")
+    @DisplayName("an array widens through arrayEach, after a List with no witness")
     void anArrayWidensThroughArrayEach() {
       assertGeneratedCodeContains(
           COMPILATION, "com.example.HolderFocus", "\"tags\").each(EachInstances.arrayEach());");
@@ -203,7 +203,7 @@ class FocusArrayWideningTest {
       assertGeneratedCodeContains(
           COMPILATION,
           "com.example.HolderFocus",
-          "\"rows\").<String[]>each().each(EachInstances.arrayEach());");
+          "\"rows\").each(EachInstances.listEach()).each(EachInstances.arrayEach());");
     }
   }
 

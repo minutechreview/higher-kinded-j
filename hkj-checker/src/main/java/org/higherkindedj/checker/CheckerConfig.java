@@ -4,6 +4,7 @@ package org.higherkindedj.checker;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import javax.tools.Diagnostic;
@@ -81,8 +82,9 @@ public final class CheckerConfig {
   public static final String SUPPRESS_ALL = "hkj-checker";
 
   /**
-   * Checks whose built-in default is {@code WARNING}: they are the sole compile-time signal over
-   * code javac accepts, so they only nudge until a per-check override promotes them.
+   * Checks whose built-in default is {@code WARNING}: they nudge until a per-check override
+   * promotes them. Most are the sole compile-time signal over code javac accepts; {@code
+   * error-type-mismatch} explains an error javac reports, so its severity labels the note.
    */
   private static final Set<String> WARN_DEFAULT_CHECKS =
       Set.of(ERROR_TYPE_MISMATCH, MAP_NESTS_EFFECT, MIGRATION_NUDGE, RAW_KIND);
@@ -163,7 +165,7 @@ public final class CheckerConfig {
   }
 
   private static Diagnostic.Kind parseSeverity(String value) {
-    return switch (value.toLowerCase()) {
+    return switch (value.toLowerCase(Locale.ROOT)) {
       case "error" -> Diagnostic.Kind.ERROR;
       case "warn", "warning" -> Diagnostic.Kind.WARNING;
       default -> null; // invalid: keep the existing/default severity

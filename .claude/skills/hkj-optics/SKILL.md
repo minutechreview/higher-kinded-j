@@ -24,7 +24,7 @@ You are helping a developer use HKJ's optics system for type-safe immutable data
 | Annotation | Place On | Generates |
 |------------|----------|-----------|
 | `@GenerateLenses` | `record` | `{Record}Lenses` class with `Lens<S, A>` for each field |
-| `@GenerateFocus` | `record` | `{Record}Focus` class with `FocusPath`/`AffinePath`/`TraversalPath` builders; a field holding another annotated record gets a navigator for cross-type chaining |
+| `@GenerateFocus` | `record` | `{Record}Focus` class with `FocusPath`/`AffinePath`/`TraversalPath` builders; a field holding another annotated record, or a `List`, `Optional` or other container of one, gets a navigator for cross-type chaining |
 | `@GenerateTraversals` | `record` with collection fields | `{Record}Traversals` with `Traversal<S, A>` for collection fields; a component that holds elements but has no generator (`Deque`, `SortedMap`, a raw `List`) draws a processor note (a note, not a warning: there is no per-component opt-out) |
 | `@GeneratePrisms` | `sealed interface` or `enum` | `{Type}Prisms` class with a `Prism<S, A>` for each permitted subtype or constant |
 | `@GenerateIsos` | a `static`, no-argument method returning an `Iso` with concrete type arguments | a companion class holding that `Iso<S, A>` as a static field |
@@ -92,20 +92,26 @@ Optional<String> nickname = nicknamePath.getOptional(shopper);
 
 <!-- verify -->
 ```java
-// A List field widens to a TraversalPath, which you chain with .via()
+// A List of annotated records gets a navigator over its elements, so each hop chains
 TraversalPath<OrgChart, String> allNames =
-    OrgChartFocus.units()                // TraversalPath<OrgChart, OrgUnit>
-        .via(OrgUnitFocus.members())     // TraversalPath<OrgChart, OrgMember>
-        .via(OrgMemberFocus.name());     // TraversalPath<OrgChart, String>
+    OrgChartFocus.units()   // a navigator, and a TraversalPath<OrgChart, OrgUnit>
+        .members()          // a navigator, and a TraversalPath<OrgChart, OrgMember>
+        .name();            // TraversalPath<OrgChart, String>
 
 List<String> names = allNames.getAll(company);
 OrgChart updated = allNames.modifyAll(String::toUpperCase, company);
 ```
 
 Navigators are generated for **nested record** fields (`ShopperFocus.address().city()` above) and for
-SPI containers of one that the record widens: an `Either` always, and a `Map`, an array or a
-third-party collection under `widenCollections = true` or when `widenFields` names the field.
-`List`, `Set`, `Optional` and `Maybe` fields are widened instead, so you chain them with `.via(...)`. A generic nested record gets one too, instantiated with the
+containers of one that the record widens: an `Optional`, `Maybe`, `List`, `Set`, `Collection` or
+`Either` always, and a `Map`, an array or a third-party collection under `widenCollections = true`
+or when `widenFields` names the field. Containers nested in one another compose to the record they
+hold, so `List<Optional<OrgMember>>` navigates too, and so does a `Kind<F, A>` of records the processor traverses. A hop
+that widens the path keeps navigating. Each navigator has a form nested in it for each wider path
+type, `AffineForm` and `TraversalForm`. From `OrderHistoryFocus.orders()`, a navigator over a `List<Order>`,
+`orders().customer()` returns `OrderFocus.CustomerNavigator.TraversalForm`, so `.email()` chains. A path
+method such as `filter` returns a plain path, so chain the next hop with `.via(...)`.
+A generic nested record gets a navigator too, instantiated with the
 field's type arguments: `Revision<EmailAddress> email` chains as `.email().current()`. A field that
 names no single type for its parameters, such as `Revision<?>` or a raw `Revision`, gets no
 navigator, and the processor says so in a note naming the path its method returns. No
@@ -128,13 +134,26 @@ A nested record's field named like one of the path's no-argument methods, such a
 `each` or `segments`, cannot be navigated to, since the call would reach the path's own method. On
 a record that leaves navigators to the default, the field that reaches it keeps its plain path,
 with a note; on one that writes `generateNavigators = true`, the processor refuses it. Rename the
-field, or keep the navigating field a plain path with `excludeFields`.
+field, or keep the navigating field a plain path with `excludeFields`. An unwidened `Map` or other
+container of such records draws a note asking for the rename before `widenFields`. The same goes for a form: a
+target field named `headOption` or `toTraversal` leaves out the `TraversalForm`, and `toAffine` the
+`AffineForm`, so a hop into it from a wider path returns a plain path. The record declaring the
+field gets a note naming the field to rename, if it writes `generateNavigators = true`.
+Two fields whose names differ only in the case of their first letter, such as `items` and `Items`,
+would name one navigator class. Where both would have one, the first in declaration order keeps
+it; the later one keeps its plain path, with a note on the default or an error under
+`generateNavigators = true`. An earlier field with no navigator leaves the name free. A message offering
+a field a navigator, such as a note to widen a container, asks for one of the two to be renamed
+first where its change alone would end there.
 
 The names in `includeFields`, `excludeFields` and `widenFields` are checked against the record's
 components: one that matches none is an error offering the component it meant. A list that changes
 nothing warns: `excludeFields` beside a non-empty `includeFields`, `includeFields` or
 `excludeFields` with `generateNavigators = false`, `widenFields` beside `widenCollections = true`, or a `widenFields`
 name whose field is already widened (a `List`, an `Optional`) or holds no container (a `String`).
+An `includeFields` name whose field has no navigator warns too: a `String`, a record without
+`@GenerateFocus` or a container of one, or a `Map` of `@GenerateFocus` records left unwidened (add it
+to `widenFields`). A field that already draws a note, such as a `Box<?>`, gets no warning.
 
 The nested record may live in a dependency, provided that module ran hkj-processor: the navigator
 composes the `Focus` class the dependency published, whichever processor version built it. A
@@ -330,16 +349,19 @@ total `B -> S` build, so the result could not honour `build`. To validate siblin
 
 | Method | On Path Type | Produces | Description |
 |--------|-------------|----------|-------------|
-| `.each()` | FocusPath on `List` | TraversalPath | Traverse all elements (`List` only) |
+| `.each(EachInstances.listEach())` | FocusPath on `List` | TraversalPath | Traverse all elements, rebuilding the list |
 | `.each(EachInstances.setEach())` | FocusPath on `Set` | TraversalPath | Traverse all elements, rebuilding the set |
 | `.each(EachInstances.collectionEach())` | FocusPath on `Collection` | TraversalPath | Traverse all elements, rebuilding a set as a set and anything else as a list |
 | `.each(Each)` | FocusPath on custom container | TraversalPath | Traverse with custom Each instance |
-| `.at(index)` | FocusPath on `List` | AffinePath | Access specific index |
-| `.some()` | FocusPath on `Optional` | AffinePath | Unwrap Optional |
+| `.via(FocusPaths.listAt(index))` | FocusPath on `List` | AffinePath | Access specific index |
+| `.via(FocusPaths.mapAt(key))` | FocusPath on `Map` | AffinePath | Access the value at a key |
+| `.some(FocusPaths.optionalSome())` | FocusPath on `Optional` | AffinePath | Unwrap Optional |
 | `.some(Affine)` | FocusPath on `Either`/`Try`/etc | AffinePath | Unwrap with custom Affine |
 | `.nullable()` | FocusPath on `@Nullable` field | AffinePath | Handle null safely |
 | `.filter(predicate)` | TraversalPath | TraversalPath | Keep only matching elements |
 | `AffinePath.instanceOf(Class)` | Static factory | AffinePath | Safe downcast; compose via `.via()` |
+
+The no-argument `each()`, `some()`, `head()`, `last()`, `tail()`, `init()`, `cons()`, `snoc()`, `headTail()` and `initLast()`, and `at(index)`, `atKey(key)` and `traverseOver(traverse)`, are deprecated for removal in 0.6.0: they compile on any focus and throw `ClassCastException` on the wrong one. Write the typed form above instead; a list step is `.via(FocusPaths.listHead())` and so on, and `traverseOver(t)` is `.each(EachInstances.fromTraverse(t))`. In existing code, the `org.higherkindedj.openrewrite.MigrateDeprecationsTo0_6_0` recipe rewrites them and marks the calls a typed form does not fit.
 
 ---
 
@@ -354,7 +376,7 @@ package com.myapp.optics;
 import org.higherkindedj.optics.annotations.ImportOptics;
 ```
 
-Generates `LocalDateLenses` with `year()`, `dayOfMonth()` and `dayOfYear()` by auto-detecting wither methods. A wither pairs only with a getter returning exactly what it takes, so there is no month lens: `withMonth(int)` meets `getMonth()`, which returns `Month`. A lower-case letter straight after `with` makes a word, not a wither (`withdraw`), unless a capital follows it, as in the JavaBeans `witheMail`.
+Generates `LocalDateLenses` with `year()`, `dayOfMonth()` and `dayOfYear()` by auto-detecting wither methods. A wither pairs only with a getter returning exactly what it takes, so there is no month lens: `withMonth(int)` meets `getMonth()`, which returns `Month`. A lower-case letter straight after `with` makes a word, not a wither (`withdraw`), unless a capital follows it, as in the JavaBeans `witheMail`, which pairs with `geteMail()` as `withEMail` does with `getEMail()`. The lens is named after what follows `with`, its first letter in lower case, so `withURL` gives `uRL()`.
 
 ### Full Control: `OpticsSpec`
 

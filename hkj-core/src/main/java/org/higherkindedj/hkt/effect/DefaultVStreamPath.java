@@ -19,6 +19,7 @@ import org.higherkindedj.hkt.Unit;
 import org.higherkindedj.hkt.effect.capability.Chainable;
 import org.higherkindedj.hkt.effect.capability.Combinable;
 import org.higherkindedj.hkt.function.Function3;
+import org.higherkindedj.hkt.nonemptylist.NonEmptyList;
 import org.higherkindedj.hkt.vstream.VStream;
 import org.higherkindedj.hkt.vstream.VStreamPar;
 import org.higherkindedj.hkt.vstream.VStreamReactive;
@@ -74,12 +75,13 @@ public record DefaultVStreamPath<A>(VStream<A> stream) implements VStreamPath<A>
   // ===== Chainable implementation =====
 
   @Override
-  public <B> VStreamPath<B> via(Function<? super A, ? extends Chainable<B>> mapper) {
+  public <B> VStreamPath<B> via(
+      Function<? super A, ? extends Chainable<? extends VStreamPath<?>, B>> mapper) {
     Objects.requireNonNull(mapper, "mapper must not be null");
     return new DefaultVStreamPath<>(
         stream.flatMap(
             a -> {
-              Chainable<B> chainable = mapper.apply(a);
+              Chainable<? extends VStreamPath<?>, B> chainable = mapper.apply(a);
               Objects.requireNonNull(chainable, "mapper must not return null");
 
               if (!(chainable instanceof VStreamPath<?> vsp)) {
@@ -94,7 +96,8 @@ public record DefaultVStreamPath<A>(VStream<A> stream) implements VStreamPath<A>
   }
 
   @Override
-  public <B> VStreamPath<B> then(Supplier<? extends Chainable<B>> supplier) {
+  public <B> VStreamPath<B> then(
+      Supplier<? extends Chainable<? extends VStreamPath<?>, B>> supplier) {
     Objects.requireNonNull(supplier, "supplier must not be null");
     return via(ignored -> supplier.get());
   }
@@ -103,7 +106,8 @@ public record DefaultVStreamPath<A>(VStream<A> stream) implements VStreamPath<A>
 
   @Override
   public <B, C> VStreamPath<C> zipWith(
-      Combinable<B> other, BiFunction<? super A, ? super B, ? extends C> combiner) {
+      Combinable<? extends VStreamPath<?>, B> other,
+      BiFunction<? super A, ? super B, ? extends C> combiner) {
     Objects.requireNonNull(other, "other must not be null");
     Objects.requireNonNull(combiner, "combiner must not be null");
 
@@ -270,12 +274,13 @@ public record DefaultVStreamPath<A>(VStream<A> stream) implements VStreamPath<A>
   // ===== Chunking operations =====
 
   @Override
-  public VStreamPath<List<A>> chunk(int size) {
+  public VStreamPath<NonEmptyList<A>> chunk(int size) {
     return new DefaultVStreamPath<>(stream.chunk(size));
   }
 
   @Override
-  public <B> VStreamPath<B> mapChunked(int size, Function<List<A>, List<B>> f) {
+  public <B> VStreamPath<B> mapChunked(
+      int size, Function<? super NonEmptyList<A>, ? extends List<B>> f) {
     Objects.requireNonNull(f, "f must not be null");
     return new DefaultVStreamPath<>(stream.mapChunked(size, f));
   }

@@ -7,7 +7,6 @@ import org.higherkindedj.example.book.optics.cast.Consignment;
 import org.higherkindedj.example.book.optics.cast.ConsignmentLenses;
 import org.higherkindedj.example.book.optics.cast.ConsignmentState;
 import org.higherkindedj.example.book.optics.cast.ConsignmentStatePrisms;
-import org.higherkindedj.example.book.optics.cast.LineItem;
 import org.higherkindedj.example.book.optics.cast.LineItemFocus;
 import org.higherkindedj.example.book.optics.cast.Order;
 import org.higherkindedj.example.book.optics.cast.OrderFocus;
@@ -16,6 +15,7 @@ import org.higherkindedj.optics.Affine;
 import org.higherkindedj.optics.Prism;
 import org.higherkindedj.optics.focus.AffinePath;
 import org.higherkindedj.optics.focus.FocusPath;
+import org.higherkindedj.optics.focus.FocusPaths;
 
 /**
  * The code shown on the book's <a
@@ -78,8 +78,7 @@ public final class FromMonocleBook {
 
   static HeadOptionResults headOption(Order order) {
     // ANCHOR: head_option
-    AffinePath<Order, Integer> firstQuantity =
-        OrderFocus.lines().via(LineItemFocus.quantity()).headOption();
+    AffinePath<Order, Integer> firstQuantity = OrderFocus.lines().quantity().headOption();
 
     // The read is the first line's quantity
     Optional<Integer> read = firstQuantity.getOptional(order);
@@ -90,7 +89,7 @@ public final class FromMonocleBook {
     // To write the first line alone, index the list
     Order firstLine =
         FocusPath.of(OrderLenses.lines())
-            .<LineItem>at(0)
+            .via(FocusPaths.listAt(0))
             .via(LineItemFocus.quantity())
             .set(7, order);
     // ANCHOR_END: head_option

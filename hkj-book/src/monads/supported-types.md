@@ -41,7 +41,7 @@ What does your computation do?
   |
   +-- Needs stack-safe recursion?         --> Trampoline
   +-- Building a DSL / interpreter?       --> Free / FreeAp
-  +-- Combining two monadic effects?      --> MaybeT / EitherT / OptionalT / ReaderT / StateT
+  +-- Combining two monadic effects?      --> MaybeT / EitherT / OptionalT / ReaderT / StateT / WriterT
 ```
 
 ## All Supported Types at a Glance
@@ -139,7 +139,7 @@ Three building blocks for generic programming, optics, and categorical abstracti
 
 ### Monad Transformers
 
-Five transformers that layer one monad's effects on top of another. "I need `IO` *and* `Either`" becomes `EitherT<IOKind.Witness, MyError, A>`.
+Six transformers that layer one monad's effects on top of another. "I need `IO` *and* `Either`" becomes `EitherT<IOKind.Witness, MyError, A>`.
 
 **[`MaybeT<F, A>`](../transformers/maybet_transformer.md)**: Adds presence/absence to any monad `F`. The inner computation is `Kind<F, Maybe<A>>`. Use when your `IO` or `CompletableFuture` might legitimately produce "no result."
 
@@ -151,6 +151,8 @@ Five transformers that layer one monad's effects on top of another. "I need `IO`
 
 **[`StateT<S, F, A>`](../transformers/statet_transformer.md)**: Adds state threading to any monad `F`. The inner computation is `S -> Kind<F, (S, A)>`. Stateful algorithms that also need IO, error handling, or other effects.
 
+**[`WriterT<F, W, A>`](../transformers/writert_transformer.md)**: Adds output accumulation, such as logs or audit trails, to any monad `F`. The inner computation is `Kind<F, Pair<A, W>>`: a value paired with the output accumulated so far. Useful when a computation that also needs IO, error handling, or other effects must record what it did along the way.
+
 ---
 
 ~~~admonish info title="Hands-On Learning"
@@ -159,5 +161,5 @@ Practise with concrete types in [Tutorial 06: Concrete Types](https://github.com
 
 ---
 
-**Previous:** [Core Types](ch_intro.md)
-**Next:** [CompletableFuture](cf_monad.md)
+**Previous:** [Const](const_type.md)
+**Next:** [Quick Reference](../hkts/quick_reference.md)

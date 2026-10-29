@@ -51,7 +51,9 @@ import java.lang.annotation.Target;
  *
  * <p>The capability interfaces above {@code Combinable} are sealed to the library's own Path types,
  * so a generated Path implements {@code Composable<A>} for {@link Capability#COMPOSABLE} and {@code
- * Combinable<A>} for every other level, and declares the further methods itself.
+ * Combinable<ApiResultPath<?>, A>}, naming its own class as the family, for every other level, and
+ * declares the further methods itself. Its {@code via}, {@code then} and {@code recoverWith} take
+ * its own class, so a step of another kind does not compile.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.SOURCE)
@@ -146,28 +148,6 @@ public @interface PathSource {
      * MonadError-level: adds {@code recover}, {@code recoverWith}, {@code mapError}, given an
      * {@link PathSource#errorType()}.
      */
-    RECOVERABLE,
-
-    /**
-     * Generates exactly what {@link #CHAINABLE} does.
-     *
-     * @deprecated since 0.4.11, for removal in 0.5.0. It generates no {@code unsafeRun}, {@code
-     *     delay} or {@code async}, since a Path over an arbitrary witness has no way to run the
-     *     effect: use {@link #CHAINABLE}, which generates the same class. The {@code
-     *     MigrateDeprecationsTo0_5_0} OpenRewrite recipe replaces it.
-     */
-    @Deprecated(since = "0.4.11", forRemoval = true)
-    EFFECTFUL,
-
-    /**
-     * Generates exactly what {@link #RECOVERABLE} does.
-     *
-     * @deprecated since 0.4.11, for removal in 0.5.0. It generates no {@code combine} or {@code
-     *     accumulateErrors}, and no error is accumulated: {@code zipWith} stops at the first, as
-     *     {@link #RECOVERABLE}'s does. Use {@link #RECOVERABLE}, which generates the same class.
-     *     The {@code MigrateDeprecationsTo0_5_0} OpenRewrite recipe replaces it.
-     */
-    @Deprecated(since = "0.4.11", forRemoval = true)
-    ACCUMULATING
+    RECOVERABLE
   }
 }

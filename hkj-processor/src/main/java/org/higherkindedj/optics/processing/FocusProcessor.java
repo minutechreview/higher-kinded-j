@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.ServiceLoader;
 import java.util.Set;
 import javax.annotation.processing.*;
@@ -40,10 +41,11 @@ import org.higherkindedj.optics.processing.util.Reachability;
  * <ul>
  *   <li><b>Standard fields</b> - Generate {@code FocusPath}
  *   <li><b>Optional/Maybe fields</b> - Generate {@code AffinePath}, an {@code Optional} via {@code
- *       .some()} and a {@code Maybe} via {@code .some(Affines.just())}
+ *       .some(FocusPaths.optionalSome())} and a {@code Maybe} via {@code .some(Affines.just())}
  *   <li><b>Collection fields</b> (List, Set, Collection) - Generate {@code TraversalPath}, each
  *       through the {@code Each} that rebuilds it
- *   <li><b>Kind&lt;F, A&gt; fields</b> - Generate appropriate path via {@code .traverseOver()}
+ *   <li><b>Kind&lt;F, A&gt; fields</b> - Generate appropriate path via {@code
+ *       .each(EachInstances.fromTraverse())}
  * </ul>
  *
  * <h2>Kind Field Support</h2>
@@ -74,7 +76,7 @@ import org.higherkindedj.optics.processing.util.Reachability;
  *
  *     public static TraversalPath<Team, Member> members() {
  *         return FocusPath.of(Lens.of(...))
- *             .<ListKind.Witness, Member>traverseOver(ListTraverse.INSTANCE);
+ *             .each(EachInstances.<ListKind.Witness, Member>fromTraverse(ListTraverse.INSTANCE));
  *     }
  * }
  * }</pre>
@@ -245,9 +247,9 @@ public class FocusProcessor extends AbstractProcessor {
       // Fall back to the static FocusPath method when no navigator took the field. The one
       // analysis says what that method widens to, and a container it turned away is rejected from
       // the same result, so the method's shape and the diagnostic cannot disagree. A field a
-      // navigator did take reaches its element through a container the navigator's guard already
-      // admitted, so no container is turned away for it. This walk reports any generator conflict
-      // on a static field; the navigator method reports for a field it takes.
+      // navigator did take has an instantiable record in focus, which a walk that turned a
+      // container away never leaves, so no container is turned away for it. This walk reports any
+      // generator conflict on a static field; the navigator method reports for a field it takes.
       if (method == null) {
         WideningAnalysis.Widening widening =
             analysis.analyseDeclaration(
@@ -309,7 +311,7 @@ public class FocusProcessor extends AbstractProcessor {
     MethodSpec.Builder methodBuilder =
         MethodSpec.methodBuilder(componentName)
             .addJavadoc(
-                "Creates a {@link $T} for the {@code $L} field of a {@link $T}.\n\n"
+                "Creates $L {@link $T} for the {@code $L} field of {@link $T}.\n\n"
                     + "<p>The returned path can be composed with other optics for deep navigation:\n"
                     + "<pre>{@code\n"
                     + "$L.$L().$L(instance);  // Get the $L value\n"
@@ -317,6 +319,7 @@ public class FocusProcessor extends AbstractProcessor {
                     + "$L.$L().modify(fn, instance);  // Transform the $L value\n"
                     + "}</pre>\n\n"
                     + "@return A non-null {@code $L<$T, $T>}.",
+                widening.tier().article(),
                 pathClass,
                 componentName,
                 recordTypeName,
@@ -334,8 +337,9 @@ public class FocusProcessor extends AbstractProcessor {
                 recordTypeName,
                 innerTypeName)
             // The path type, the setter lambda's inferred value and the record's type-parameter
-            // bounds all land in this method.
-            .addAnnotations(ProcessorUtils.rawTypesSuppression(component.asType(), recordElement))
+            // bounds all land in this method, and so may a cast to a raw or wildcard container.
+            .addAnnotations(
+                WideningAnalysis.warningSuppression(component, recordElement, widening.steps()))
             .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
             .returns(returnTypeName);
 
@@ -351,8 +355,11 @@ public class FocusProcessor extends AbstractProcessor {
     // field-name segment, so generated paths self-locate.
     String baseLens =
         String.format(
+            Locale.ROOT,
             "$T.of($T.of($T::%s, (source, newValue) -> new $T(%s)), \"%s\")",
-            componentName, constructorArgs, componentName);
+            componentName,
+            constructorArgs,
+            componentName);
 
     // One expression per widening, built by the same analysis the return type came from, so the
     // method's shape and its body cannot disagree.

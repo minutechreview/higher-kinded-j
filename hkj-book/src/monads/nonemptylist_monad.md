@@ -82,7 +82,7 @@ Because non-emptiness is part of the type, operations that are *partial* on an o
 {{#include ../../../hkj-examples/src/main/java/org/higherkindedj/example/book/monads/nonemptylist/NonEmptyListBook.java:total_ops}}
 ```
 
-It is also `Iterable`, so it works directly in for-each loops and streams, and `toJavaList()` gives an immutable `java.util.List` for interop.
+It is also `Iterable`, so it works directly in for-each loops. `stream()` gives a `Stream`, and `toJavaList()` gives an immutable `java.util.List` for interop.
 
 ---
 
@@ -139,5 +139,5 @@ There is no factory that produces an empty `NonEmptyList`, and therefore **no `M
 
 ---
 
-**Previous:** [List](list_monad.md)
+**Previous:** [EitherOrBoth](either_or_both_monad.md)
 **Next:** [Maybe](maybe_monad.md)

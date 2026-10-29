@@ -94,7 +94,7 @@ Additional considerations:
 | `LazyPath<A>` | Deferred, memoised | `Path.lazyDefer(() -> ...)`, `Path.lazyNow(v)` | `.run()` -> `A` |
 | `CompletableFuturePath<A>` | Async | `Path.future(cf)`, `Path.futureAsync(() -> ...)` | `.run()` -> `CompletableFuture<A>` |
 | `ListPath<A>` | Batch (positional zip) | `Path.listPath(list)` | `.run()` -> `List<A>` |
-| `StreamPath<A>` | Lazy sequences | `Path.stream(stream)` | `.run()` -> `Stream<A>` |
+| `StreamPath<A>` | Sequences you can run more than once | `Path.stream(stream)`, `Path.streamIterate(seed, f)` | `.run()` -> `Stream<A>` |
 | `NonDetPath<A>` | Non-deterministic | `Path.list(list)` | `.run()` -> `List<A>` |
 | `IdPath<A>` | Pure values | `Path.id(v)` | `.run()` -> `Id<A>` |
 | `OptionalPath<A>` | Optional bridge | `Path.optional(opt)`, `Path.present(v)` | `.run()` -> `Optional<A>` |
@@ -232,7 +232,7 @@ String first = reasons.head();   // total: no Optional, no throw. This is the wh
 | `NonEmptyList.semigroup()` | The canonical combine for accumulation |
 
 Ops: `head()`, `last()`, `size()`, `map`, `flatMap`, `foldLeft`, `reverse`, `concat`, `append`,
-`prepend`, `reduce(sg)`, `min/max(cmp)`, `toJavaList()`.
+`prepend`, `reduce(sg)`, `min/max(cmp)`, `stream()`, `toJavaList()`.
 
 Use the `Nel` factories to get a `NonEmptyList` error channel without naming a semigroup:
 
@@ -433,9 +433,10 @@ return Path.right(user);
 return Path.<AppError, User>right(user);
 ```
 
-### 2. "MaybePath cannot be converted to EitherPath"
+### 2. "MaybePath<User> cannot be converted to Chainable<? extends EitherPath<…>,B>"
 
-**Cause**: `via` requires the same Path kind throughout a chain.
+**Cause**: A step must be the chain's own kind of Path. The capability interfaces carry the Path's
+family, so javac rejects a step of another kind; the HKJ checker adds `Path type mismatch in via()`.
 **Fix**: Convert at the boundary.
 ```java
 .via(id -> Path.maybe(findUser(id))
@@ -456,14 +457,31 @@ return Path.<AppError, User>right(user);
 **Cause**: Lambda has branches with different return types or missing return.
 **Fix**: Ensure all branches return the same type, or extract to a named method.
 
-### 5. "Type argument E is not within bounds" (error type mismatch)
+### 5. "EitherPath<DbError,User> cannot be converted to Chainable<? extends EitherPath<? extends AppError,?>,B>"
 
-**Cause**: Different steps in a chain use different error types.
-**Fix**: Standardise on one error type using `.mapError()`.
+**Cause**: A step fails with an error the chain does not carry. Read the `Chainable<…>` as "the
+chain is typed on `AppError`". A step may fail with a subtype of the chain's error, such as one
+variant of a sealed error, but not with an unrelated type or a wider one.
+**Fix** for an unrelated error: map it into the chain's inside the step.
 ```java
 .via(id -> lookupUser(id)
     .mapError(dbError -> new AppError.DatabaseError(dbError)))
 ```
+**Fix** for a chain typed on one variant, such as `UserNotFound`, or for `inference variable E has
+incompatible bounds`: write the wider type where the chain is typed. The HKJ checker's note names
+the place.
+- `.<AppError>toEitherPath(...)`, `.<AppError>mapError(Variant::new)` or `Path.<AppError, User>right(...)`
+- `.<AppError>mapError(e -> e)` after a helper that returns `EitherPath<UserNotFound, User>`
+- `.mapErrorWith(e -> e, semigroup)` on a `ValidationPath` or `EitherOrBothPath`; for `NonEmptyList`
+  errors, map the list: `.mapErrorWith(errors -> errors.<AppError>map(e -> e), NonEmptyList.semigroup())`
+
+### 6. "wrong number of type arguments; required 2" on `Chainable<A>` (3 on `Recoverable<E, A>`)
+
+**Cause**: Code names a capability type with the arguments of a release before 0.6.0. Each capability
+interface now takes the Path's family first.
+**Fix**: Write `Chainable<?, A>`, `Effectful<?, A>` or `Recoverable<?, E, A>` to map, recover and run;
+declare the family as a type parameter, `<P, A> Chainable<P, A>`, to chain. The OpenRewrite recipe
+`org.higherkindedj.openrewrite.AddPathFamily` does the first for you.
 
 ---
 
@@ -476,7 +494,7 @@ public EitherPath<OrderError, Order> processOrder(String userId, OrderRequest re
     return Path.maybe(userRepository.findById(userId))
         .<OrderError>toEitherPath(new OrderError.UserNotFound(userId))
         .via(user -> Path.either(validator.validate(request))
-            .mapError(OrderError.ValidationFailed::new)
+            .<OrderError>mapError(OrderError.ValidationFailed::new)
             .via(validated -> Path.tryOf(() -> paymentService.charge(user, validated.amount()))
                 .toEitherPath(OrderError.PaymentFailed::new))
             .map(payment -> createOrder(user, request, payment)));
@@ -486,7 +504,8 @@ public EitherPath<OrderError, Order> processOrder(String userId, OrderRequest re
 `toEitherPath` takes the error **value** here; a `Supplier` overload defers building it to the
 `Nothing` branch, for an error that is not free to construct. The `<OrderError>` witness widens the
 error from the concrete `UserNotFound` to the sealed parent, which is what the rest of the chain is
-typed on.
+typed on. `.<OrderError>mapError` does the same for the inner chain, whose next step fails with
+`PaymentFailed`.
 A step that needs an earlier binding (`user`, here) nests inside the `via` that bound it; when the
 nesting gets deep, reach for `ForPath`, which keeps every binding in scope and stays flat.
 

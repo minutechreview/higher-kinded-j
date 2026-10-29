@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.higherkindedj.example.book.optics.cast.Address;
 import org.higherkindedj.example.book.optics.cast.Bank;
 import org.higherkindedj.example.book.optics.cast.Card;
@@ -28,6 +29,8 @@ import org.higherkindedj.hkt.either.Either;
 import org.higherkindedj.hkt.maybe.Maybe;
 import org.higherkindedj.optics.focus.AffinePath;
 import org.higherkindedj.optics.focus.FocusPath;
+import org.higherkindedj.optics.focus.FocusPaths;
+import org.higherkindedj.optics.focus.NavigatorTraversalPath;
 import org.higherkindedj.optics.focus.TraversalPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,7 +44,8 @@ class NavigationBookTest {
   private static final Consignment CONSIGNMENT = consignment(new ConsignmentState.Pending());
 
   @Test
-  @DisplayName("the generated list method and .each() on the lens reach the same elements")
+  @DisplayName(
+      "the generated list method and .each(listEach()) on the lens reach the same elements")
   void eachGenerated() {
     assertThat(NavigationBook.eachGenerated(ORDER))
         .containsExactly(List.of(LAMP, BULB), List.of(LAMP, BULB));
@@ -107,9 +111,22 @@ class NavigationBookTest {
   void navigators() {
     assertThat(NavigationBook.navigatorAsPath(CONSIGNMENT)).containsExactly("London", "London");
 
-    NavigationBook.NavigatorOrVia result = NavigationBook.navigatorOrVia(ORDER);
+    NavigationBook.NavigatorHops result = NavigationBook.navigatorHops(ORDER);
     assertThat(result.email()).isEqualTo("ada@example.com");
     assertThat(result.skus()).containsExactly("LAMP", "BULB");
+  }
+
+  @Test
+  @DisplayName("a hop from a wider path navigates on, into a list or into one record")
+  void widerHop() {
+    NavigationBook.WiderHop hop = NavigationBook.widerHop(new OrderHistory(List.of(ORDER, ORDER)));
+
+    List<BigDecimal> prices = ORDER.lines().stream().map(LineItem::price).toList();
+    assertThat(hop.prices())
+        .containsExactlyElementsOf(Stream.concat(prices.stream(), prices.stream()).toList());
+    assertThat(hop.emails()).containsExactly("ada@example.com", "ada@example.com");
+    assertThat(OrderHistoryFocus.orders().lines()).isInstanceOf(NavigatorTraversalPath.class);
+    assertThat(OrderHistoryFocus.orders().customer()).isInstanceOf(NavigatorTraversalPath.class);
   }
 
   @Test
@@ -217,7 +234,7 @@ class NavigationBookTest {
   void checkpointAtZeroOrHeadOption() {
     LineItem sofa = new LineItem("SOFA", 1, new BigDecimal("400.00"));
 
-    assertThat(FocusPath.of(OrderLenses.lines()).<LineItem>at(0).set(sofa, ORDER).lines())
+    assertThat(FocusPath.of(OrderLenses.lines()).via(FocusPaths.listAt(0)).set(sofa, ORDER).lines())
         .containsExactly(sofa, BULB);
     assertThat(OrderFocus.lines().headOption().set(sofa, ORDER).lines())
         .containsExactly(sofa, sofa);

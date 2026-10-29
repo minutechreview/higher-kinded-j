@@ -82,7 +82,8 @@ public @interface GenerateFocus {
   String targetPackage() default "";
 
   /**
-   * Whether a field whose type is a {@code @GenerateFocus} record gets a navigator.
+   * Whether a field whose type is a {@code @GenerateFocus} record, or a container of one, gets a
+   * navigator.
    *
    * <p>A navigator enables patterns like {@code PersonFocus.address().city()} without explicit
    * {@code .via()} calls. A record from another module qualifies once that module has generated its
@@ -98,16 +99,32 @@ public @interface GenerateFocus {
    *   <li>It extends {@code NavigatorFocusPath}, {@code NavigatorAffinePath} or {@code
    *       NavigatorTraversalPath}, so it goes wherever a path of that type goes, and code that
    *       names the field's path type keeps compiling when the field gets a navigator.
-   *   <li>It steps into a container only where the field's method does: an {@code Either}, {@code
-   *       Try} or other zero-or-one SPI container always, a {@code Map}, an array or other
-   *       zero-or-more one under {@link #widenCollections()} or {@link #widenFields()}. {@code
-   *       Optional}, {@code Maybe}, {@code List}, {@code Set} and {@code Collection} are widened by
-   *       name and never get one.
+   *   <li>It steps into a container only where the field's method does: an {@code Optional}, {@code
+   *       Maybe}, {@code List}, {@code Set} or {@code Collection}, and an {@code Either}, {@code
+   *       Try} or other zero-or-one SPI container, always; a {@code Map}, an array or other
+   *       zero-or-more one under {@link #widenCollections()} or {@link #widenFields()}. Containers
+   *       nested in one another compose to the record they hold. So {@code List<LineItem> lines}
+   *       gets a navigator over every line, and {@code lines().quantity()} chains. A {@code Kind}
+   *       field the processor traverses gets one too.
+   *   <li>It has a form nested in it for each wider path type, {@code AffineForm} and {@code
+   *       TraversalForm}: the same navigator over that path. A hop that widens the path hands on
+   *       the form. So from {@code OrderHistoryFocus.orders()}, a navigator over a {@code
+   *       List<Order>}, {@code orders().customer()} returns {@code
+   *       OrderFocus.CustomerNavigator.TraversalForm}, and {@code .email()} chains.
    *   <li>It cannot navigate to a field of the record it reaches named like one of the path's own
    *       no-argument methods, such as {@code last} or {@code head}, since a call to it would reach
    *       the path's method instead. A record that writes {@code generateNavigators = true} is
    *       refused at the field that navigates; one that leaves the default keeps that field's plain
-   *       path, with a note.
+   *       path, with a note. A form is left out where its own path has such a method, such as
+   *       {@code headOption} on a {@code TraversalPath}, and a hop that would need it returns a
+   *       plain path. The record declaring the field is told so, with a note, if it writes {@code
+   *       generateNavigators = true}.
+   *   <li>A navigator class takes its field's name with the first letter in upper case, so two
+   *       fields whose names differ only in that letter's case, such as {@code items} and {@code
+   *       Items}, cannot both have one. Of two that would, the first in declaration order keeps it;
+   *       an earlier field with no navigator, such as a {@code String items}, leaves the name free.
+   *       A record that writes {@code generateNavigators = true} is refused at the later field; one
+   *       that leaves the default keeps that field's plain path, with a note.
    * </ul>
    *
    * @return true to generate navigators, false for plain paths only (default: true, since 0.5.0)
@@ -125,10 +142,8 @@ public @interface GenerateFocus {
    *
    * <p>A value of {@code 2} or more, the default included, ends no chain. A hop into another
    * navigable record returns the navigator that the {@code Focus} class of the record it leaves
-   * declares for that field, and that navigator is generated once per record, so a longer chain
-   * generates no more code. A chain still ends where a hop widens the path: a navigator over an
-   * {@code Either}, a {@code @Nullable} field or a widened collection that hops into a record field
-   * returns the composed {@code AffinePath} or {@code TraversalPath}.
+   * declares for that field, or that navigator's form for a wider path. Each is generated once per
+   * record, so a longer chain generates no more code.
    *
    * <p>Default: 3.
    *
@@ -165,7 +180,8 @@ public @interface GenerateFocus {
    * such as a {@code Map}, whole.
    *
    * <p>A navigator steps into a container only where the field is widened, so this is also how a
-   * container of {@code @GenerateFocus} records gets a navigator over its elements.
+   * {@code Map}, an array or a third-party collection of {@code @GenerateFocus} records gets a
+   * navigator over its elements.
    *
    * <p>Each name is checked against the record's components. A name that matches none is an error,
    * offering the component it most likely meant. A name whose field this cannot widen draws a
@@ -186,9 +202,11 @@ public @interface GenerateFocus {
    *
    * <p>Each name is checked against the record's components, and a name that matches none is an
    * error, offering the component it most likely meant: such a name would turn a navigator off
-   * rather than on. Set this or {@link #excludeFields()}, not both: beside a non-empty {@code
-   * includeFields}, {@code excludeFields} is never read, and draws a warning. With {@code
-   * generateNavigators = false}, neither is read, and each draws a warning.
+   * rather than on. A name whose field has no navigator, such as a {@code String}, an unannotated
+   * record, or a {@code Map} of navigable records that the record does not widen, draws a warning,
+   * unless a note or error already explains why. Set this or {@link #excludeFields()}, not both:
+   * beside a non-empty {@code includeFields}, {@code excludeFields} is never read, and draws a
+   * warning. With {@code generateNavigators = false}, neither is read, and each draws a warning.
    *
    * @return array of field names to include, or empty for all fields
    */

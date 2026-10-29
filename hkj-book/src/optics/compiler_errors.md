@@ -30,11 +30,15 @@ Rows below and headings on the page say which, wherever it is not an error.
 | [`does not return an Iso with both type arguments`](#generateisos-x-does-not-return-an-iso-with-both-type-arguments) | The `@GenerateIsos` method returns something else |
 | [`cannot be reached from 'p'`](#generateisos-x-cannot-be-reached-from-p) | The `@GenerateIsos` method is not visible from the generated package |
 | [`The generated companion is a top-level class`](#companion-cannot-be-reached) | A type the generated companion names is `private`, or hidden in another package |
-| [`has a wildcard type argument`, `has a raw Set`](#generatefocus-record-component-xy-has-a-wildcard-type-argument-in-set-extends-t) | A widened container is raw, or has a wildcard type argument |
+| [`has a wildcard type argument`, `has a raw Either`](#generatefocus-record-component-xy-has-a-wildcard-type-argument-in-set-extends-t) | A widened SPI container, such as `Either`, is raw or has a wildcard |
 | [`cannot navigate to`](#generatefocus-navigator-cannot-navigate) | A record that writes `generateNavigators = true` reaches a record with a field named like a no-argument path method |
 | [`has no navigator into`](#generatefocus-no-navigator-into) | **Note.** The same clash, on a record that leaves navigators to the default: the field keeps its plain path |
+| [`cannot share its class name`](#generatefocus-navigator-shares-class-name) | A record that writes `generateNavigators = true` has two fields whose names differ only in the case of their first letter |
+| [`has its class name`](#generatefocus-no-navigator-shared-name) | **Note.** The same clash, on a record that leaves navigators to the default: the later field keeps its plain path |
 | [`has no navigator over its`](#generatefocus-no-navigator-over-elements) | **Note.** A record that writes `generateNavigators = true` leaves a container of navigable records unwidened |
+| [`has no AffineForm`, `has no TraversalForm`](#generatefocus-no-form) | **Note.** A record that writes `generateNavigators = true` reaches a record with a field named like a wider path's own method, so a hop from that path returns the plain path |
 | [`which is not a component of`](#generatefocus-field-list-unknown-name) | `includeFields`, `excludeFields` or `widenFields` names a field the record does not have |
+| [`whose field has no navigator`](#generatefocus-includefields-no-navigator) | **Warning.** `includeFields` names a component that has no navigator |
 | [`changes nothing, because`](#generatefocus-field-list-unread) | **Warning.** A field list the record's other settings never read |
 | [`is widened without it`, `holds no container widenFields widens`](#generatefocus-widenfields-cannot-widen) | **Warning.** A `widenFields` name whose path widening cannot change |
 | [`no traversal was generated for component`](#generatetraversals-no-traversal-was-generated-for-component-xy-of-type-dequet-a-note) | **Note.** `@GenerateTraversals` found no generator for a container |
@@ -121,9 +125,11 @@ Rows below and headings on the page say which, wherever it is not an error.
 
 | The message says | What it means |
 |------------------|---------------|
-| [`List<Object> cannot be converted to`, after `traverseOver`](#traverseover-and-the-higher-kinded-witness-type) | `traverseOver`'s element type is not pinned |
+| [`List<Object> cannot be converted to`, after `traverseOver`](#traverseover-and-the-higher-kinded-witness-type) | `traverseOver`'s element type is not pinned; `each(EachInstances.fromTraverse(...))` pins it |
 | [`Incompatible types`, after `.each().via()`](#incompatible-types-when-chaining-eachvia) | Usually one `.each()` too many |
-| [`Cannot infer type argument(s)`](#cannot-infer-type-arguments-on-an-intermediate-each) | Only the final `each()` in a chain can infer its element type |
+| [`Cannot infer type argument(s)`](#cannot-infer-type-arguments-on-an-intermediate-each) | Only the final untyped `each()` in a chain can infer its element type |
+| [`no suitable method found for each(...)`, or for `some` or `via`](#no-suitable-method-found-for-each) | The path does not focus on the container the typed step names |
+| [`each() in org.higherkindedj.optics.focus.FocusPath has been deprecated and marked for removal`](#untyped-shortcut-marked-for-removal) | **Warning.** A no-argument shortcut, due to go in 0.6.0, has a typed form |
 | [`::new` rejected as a `BiFunction`](#method-reference-new-doesnt-work-with-single-field-records-as-bifunction) | A single-component record has no two-argument constructor |
 | [`Sealed or non-sealed local classes are not allowed`](#sealed-or-non-sealed-local-classes-are-not-allowed) | A sealed interface is declared inside a method body |
 | [`Cannot resolve method 'flatMap(...)'`](#cannot-resolve-method-flatmapfunction) | Two `Free` witness types are being mixed |
@@ -390,21 +396,21 @@ class Shop {
 ```
 ~~~
 
-### "@GenerateFocus: record component 'X.y' has a wildcard type argument in Set<? extends T>"
+### "@GenerateFocus: record component 'X.y' has a wildcard type argument in Either<String, ? extends T>" {#generatefocus-record-component-xy-has-a-wildcard-type-argument-in-set-extends-t}
 
-A container that the processor widens through an optic **instance** is declared raw, or with a wildcard type argument. The same error covers `Set`, `Collection`, `Maybe`, `Map`, `Either`, `Try` and every other such container, and is also reported as *"has a raw Set"*.
+A container that the processor widens through the optic its SPI generator supplies is declared raw, or with a wildcard type argument. The same error covers `Either`, `Try`, `Validated`, `Map` and every other such container, and is also reported as *"has a raw Either"*. A `Map` or another collection draws it only once something widens it. The five built-in containers, `Optional`, `Maybe`, `List`, `Set` and `Collection`, never draw it.
 
-**Fix.** Name the type argument, `Set<Widget>` rather than `Set<? extends Widget>`. For a wildcard, you can instead drop `@GenerateFocus` from the record and keep `@GenerateLenses` and `@GenerateTraversals`, which compose no optic instance and take the component as written. A raw container has no element type for `@GenerateTraversals` to focus, so it draws a note and no traversal there; keep `@GenerateLenses` alone for one. See [Custom Containers](focus_containers.md#supported-container-types).
+**Fix.** Name the type arguments, `Either<String, Widget>` rather than `Either<String, ? extends Widget>`. For a wildcard, you can instead drop `@GenerateFocus` from the record and keep `@GenerateLenses` and `@GenerateTraversals`, which compose no optic instance. The lens keeps the component's type as written. The traversal focuses [the type the wildcard stands for](traversals.md#wildcard-element-types): `Widget` for `? extends Widget`, and `Object` for `?` or `? super Widget`. A raw container has no element type for `@GenerateTraversals` to focus, so it draws a note and no traversal there; keep `@GenerateLenses` alone for one. See [Custom Containers](focus_containers.md#supported-container-types).
 
 ~~~admonish note title="Why" collapsible=true
-That instance, `EachInstances.setEach()` or `Affines.eitherRight()`, has its own type arguments worked out from the component's type. A raw container gives javac nothing to work from, and a wildcard stands for no one type. `Optional` and `List` are exempt: they widen through the no-argument `.some()` and `.each()`, whose element type is free to be whatever the field says.
+That optic, such as `Affines.eitherRight()`, has its own type arguments worked out from the component's type. A raw container gives javac nothing to work from, and a wildcard stands for no one type. A built-in container is exempt because the processor names its instance for the element the arguments stand for, and casts it to the type the field declares.
 ~~~
 
 ~~~admonish example title="A declaration that produces it" collapsible=true
-<!-- verify:rejects "has a wildcard type argument" -->
+<!-- verify:rejects "has a wildcard type argument in Either<String, ? extends T>" -->
 ```java
 @GenerateFocus
-record Bag<T>(Set<? extends T> items) {}
+record Bag<T>(Either<String, ? extends T> item) {}
 ```
 ~~~
 
@@ -415,7 +421,7 @@ record Bag<T>(Set<? extends T> items) {}
 **Fix.** Rename the field, or keep `y` a plain path, as the message says. It names the change that does that on `X`: add `y` to `excludeFields`, remove it from `includeFields`, or, where `includeFields` names only `y`, remove `includeFields` and set `generateNavigators = false`. A plain path still reaches the clashing field through `.via(TFocus.z())`.
 
 ~~~admonish note title="Why" collapsible=true
-A navigator is a path, so it already has each of those methods. A navigation method of the same name would clash with it, and leaving the field out would let `name().last()` compile against the path's own `last()`. That method reads the last element of a list, so on a record it throws `ClassCastException` when the path runs. A record that asks for navigators in so many words is refused; one that leaves the default draws [a note](#generatefocus-no-navigator-into) instead. A name that takes arguments, such as `get` or `count`, does not clash, because `get()` and `get(source)` are two methods.
+A navigator is a path, so it already has each of those methods. A navigation method of the same name would clash with it, and leaving the field out would let `name().last()` compile against the path's own `last()`. That method reads the last element of a list, so on a record it throws `ClassCastException` when the path runs. It is deprecated, and a deprecated method clashes all the same while the path has it. A record that asks for navigators in so many words is refused; one that leaves the default draws [a note](#generatefocus-no-navigator-into) instead. A name that takes arguments, such as `get` or `count`, does not clash, because `get()` and `get(source)` are two methods.
 ~~~
 
 ~~~admonish example title="A declaration that produces it" collapsible=true
@@ -435,9 +441,9 @@ error: @GenerateFocus: the navigator for 'Signatory.name' cannot navigate to 'Fu
 
 ### "@GenerateFocus: record component 'X.y' has no navigator into T" (a note) {#generatefocus-no-navigator-into}
 
-`X` leaves navigators to the default, and the record `y` holds, `T`, has a field named like one of the path's own methods that take no arguments, the ones the [entry before](#generatefocus-navigator-cannot-navigate) lists. A navigator could not navigate to that field, so `y` gets none, and its method keeps the path it has without one.
+`X` leaves navigators to the default, and the record `y` holds, `T`, has a field named like one of the path's own methods that take no arguments, the ones the [entry before](#generatefocus-navigator-cannot-navigate) lists. A navigator could not navigate to that field, so `y` gets none, and its method keeps the path it has without one. Another field of `X` may have a name that differs from `y`'s only in the case of its first letter. Where it has a navigator, or is declared before `y` and the rename would give it one, the note names both, since their navigators would [share a class name](#generatefocus-no-navigator-shared-name).
 
-**Fix.** Rename the field to give `y` a navigator. To keep the plain path and silence the note, add `y` to `excludeFields` on `X`, as the note says.
+**Fix.** Rename the field to give `y` a navigator. Where the note also names two fields of `X`, rename either of them too. To keep the plain path and silence the note, make the change it names on `X`. Add `y` to `excludeFields` or remove it from `includeFields`; where `includeFields` names only `y`, remove `includeFields` and set `generateNavigators = false`.
 
 ~~~admonish note title="Why" collapsible=true
 A record that leaves the default asked for no navigator in particular, so the field keeps the path it would have with navigators off, rather than failing the build. A record that writes `generateNavigators = true` is refused instead, by the entry before this one.
@@ -458,14 +464,66 @@ Note: @GenerateFocus: record component 'Signatory.name' has no navigator into Fu
 ```
 ~~~
 
+### "@GenerateFocus: the navigator for 'X.y' cannot share its class name with 'X.z'" {#generatefocus-navigator-shares-class-name}
+
+`X` writes `generateNavigators = true`, and two of its fields that reach `@GenerateFocus` records have names that differ only in the case of their first letter, such as `pouches` and `Pouches`. A navigator class takes its field's name with the first letter in upper case, so both would be `PouchesNavigator`. The first field in declaration order keeps the navigator, and the message is at the later one.
+
+**Fix.** Rename either field, or keep the later one a plain path, as the message says. It names the change that does that on `X`: add the later field to `excludeFields`, or, where `X` writes `includeFields`, remove it from that list, which still names the earlier field. Where the record the later field reaches has a field named like a path method, the message names it too, since a rename alone would draw [the cannot-navigate error](#generatefocus-navigator-cannot-navigate).
+
+~~~admonish note title="Why" collapsible=true
+Both classes would be nested in the record's `Focus` class, which cannot hold two classes of one name, so javac would report the second as already defined, in a file you cannot edit. The first field keeps its navigator, so a field added after it never takes that navigator away. A record that leaves navigators to the default draws [a note](#generatefocus-no-navigator-shared-name) instead. A message that offers a field a navigator, such as one asking for a container to be widened, asks for the rename first where its change alone would lead here.
+~~~
+
+~~~admonish example title="A declaration that produces it" collapsible=true
+<!-- verify:rejects "the navigator for 'Satchel.Pouches' cannot share its class name with 'Satchel.pouches'" -->
+```java
+@GenerateFocus
+record Pouch(String label, int grams) {}
+
+@GenerateFocus(generateNavigators = true)
+record Satchel(List<Pouch> pouches, List<Pouch> Pouches) {}
+```
+
+```
+error: @GenerateFocus: the navigator for 'Satchel.Pouches' cannot share its class name with 'Satchel.pouches'. 'Satchel.pouches' already has the navigator class PouchesNavigator, and a navigator for 'Pouches' would take the same name, since a navigator class takes its field's name with the first letter in upper case. Rename 'Satchel.Pouches' or 'Satchel.pouches', or add excludeFields = "Pouches" to @GenerateFocus on Satchel to keep 'Pouches' a plain path.
+```
+~~~
+
+### "@GenerateFocus: record component 'X.y' has no navigator, because 'X.z' has its class name" (a note) {#generatefocus-no-navigator-shared-name}
+
+`X` leaves navigators to the default, and `z`, declared before `y`, has a name that differs from `y`'s only in the case of its first letter. `z`'s navigator already has the class name `y`'s would take, as the [entry before](#generatefocus-navigator-shares-class-name) explains, so `y` keeps the path it has without one.
+
+**Fix.** Rename either field to give both a navigator. To keep the plain path and silence the note, make the change it names on `X`: add `y` to `excludeFields`, or, where `X` writes `includeFields`, remove `y` from it.
+
+~~~admonish note title="Why" collapsible=true
+A record that leaves the default asked for no navigator in particular, so the later field keeps the path it would have with navigators off, rather than failing the build. A record that writes `generateNavigators = true` is refused instead, by the entry before this one.
+~~~
+
+~~~admonish example title="A declaration that draws it" collapsible=true
+<!-- verify:reports "record component 'Satchel.Pouches' has no navigator, because 'Satchel.pouches' has its class name" -->
+```java
+@GenerateFocus
+record Pouch(String label, int grams) {}
+
+@GenerateFocus
+record Satchel(List<Pouch> pouches, List<Pouch> Pouches) {}
+```
+
+```
+Note: @GenerateFocus: record component 'Satchel.Pouches' has no navigator, because 'Satchel.pouches' has its class name. 'Satchel.pouches' already has the navigator class PouchesNavigator, and a navigator for 'Pouches' would take the same name, since a navigator class takes its field's name with the first letter in upper case. SatchelFocus.Pouches() keeps the path it has without one. Rename 'Satchel.Pouches' or 'Satchel.pouches' to give both a navigator, or add excludeFields = "Pouches" to @GenerateFocus on Satchel to keep the path without this note.
+```
+~~~
+
 ### "@GenerateFocus: record component 'X.y' has no navigator over its T elements" (a note) {#generatefocus-no-navigator-over-elements}
 
-`X` writes `generateNavigators = true`, and `y` is a `Map`, an array or a third-party collection of `@GenerateFocus` records that `X` does not widen. A navigator steps into a container only where the record widens it, so `y`'s method keeps a path to the whole container.
+`X` writes `generateNavigators = true`, and `y` is a `Map`, an array or a third-party collection of `@GenerateFocus` records that `X` does not widen, or a container holding one, such as `List<Map<String, Item>>`. A navigator steps into a container only where the record widens it, so `y`'s method keeps a path to the whole container. If `includeFields` names `y`, it draws the [includeFields warning](#generatefocus-includefields-no-navigator) instead. Where `T` has a field named like a method of the widened path, such as `last`, the note names that field too, since widening `y` alone would draw [the cannot-navigate error](#generatefocus-navigator-cannot-navigate). Another field of `X` may have a name that differs from `y`'s only in the case of its first letter. Where it has a navigator, the note names both, since widening `y` alone would draw [the shared-class-name error](#generatefocus-navigator-shares-class-name).
 
-**Fix.** Add `y` to `widenFields` on `X`, as the note says, and the method returns a navigator over the elements. `widenCollections = true` widens every such container instead. To keep the container whole, drop `generateNavigators = true`, which is the default, and the note goes with it.
+**Fix.** Add `y` to `widenFields` on `X`, as the note says, and the method returns a navigator over the elements. Where the note names a field of `T`, rename it first. Where it names two fields of `X`, rename either first, and write the new name in `widenFields` if you renamed `y`. Or add `y` to `excludeFields` to keep the container whole. `widenCollections = true` widens every such container instead. To keep the container whole otherwise, drop `generateNavigators = true`, which is the default, and the note goes with it. Whichever you choose, find each call through a field of `T` the note names, such as `byTicker().last()`, by hand: it compiles against the path's own `last()`, so the compiler cannot point at it.
 
 ~~~admonish note title="Why" collapsible=true
 Widening decides what a field's method focuses on, and a navigator only adds methods to that path, so turning navigators on never changes it. A record that writes `generateNavigators = true` out may still expect a navigator over a container's elements, so it is told which `widenFields` value gives one. A record that leaves navigators to the default asked for nothing, and is told nothing.
+
+A call written for a navigator over the elements, such as `byTicker().ticker()`, does not compile against the container's path, so the compiler points at it. One through a field named like a path method, such as `byTicker().last()`, compiles against the path's own `last()` and fails when the path reads. Renaming the field does not change that call.
 ~~~
 
 ~~~admonish example title="A declaration that draws it" collapsible=true
@@ -480,6 +538,61 @@ record Hamper(Bottle[] bottles) {}
 
 ```
 Note: @GenerateFocus: record component 'Hamper.bottles' has no navigator over its Bottle elements. A navigator steps into a container only where the record widens it, and Hamper does not widen 'bottles'. Add widenFields = "bottles" to @GenerateFocus on Hamper to navigate into its elements.
+```
+~~~
+
+~~~admonish example title="A declaration that draws it with a field to rename" collapsible=true
+<!-- verify:reports "Rename 'Quote.last', then add widenFields" -->
+```java
+@GenerateFocus
+record Quote(String ticker, double last) {}
+
+@GenerateFocus(generateNavigators = true)
+record Book(Map<String, Quote> byTicker) {}
+```
+
+```
+Note: @GenerateFocus: record component 'Book.byTicker' has no navigator over its Quote elements. A navigator steps into a container only where the record widens it, and Book does not widen 'byTicker'. Widened, its navigator would be a TraversalPath, which has its own last(), so it could not navigate to 'Quote.last'. Rename 'Quote.last', then add widenFields = "byTicker" to @GenerateFocus on Book to navigate into its elements, or add excludeFields = "byTicker" to @GenerateFocus on Book to go without this note.
+```
+~~~
+
+~~~admonish example title="A declaration that draws it with two fields to choose between" collapsible=true
+<!-- verify:reports "Rename 'Satchel.pouches' or 'Satchel.Pouches', then add widenFields" -->
+```java
+@GenerateFocus
+record Pouch(String label, int grams) {}
+
+@GenerateFocus(generateNavigators = true)
+record Satchel(Map<String, Pouch> pouches, List<Pouch> Pouches) {}
+```
+
+```
+Note: @GenerateFocus: record component 'Satchel.pouches' has no navigator over its Pouch elements. A navigator steps into a container only where the record widens it, and Satchel does not widen 'pouches'. A navigator for 'pouches' would share its class name, PouchesNavigator, with the navigator for 'Satchel.Pouches', since a navigator class takes its field's name with the first letter in upper case. Rename 'Satchel.pouches' or 'Satchel.Pouches', then add widenFields = "pouches", or its new name, to @GenerateFocus on Satchel to navigate into its elements, or add excludeFields = "pouches" to @GenerateFocus on Satchel to go without this note.
+```
+~~~
+
+### "@GenerateFocus: the navigator for 'X.y' has no TraversalForm" (a note) {#generatefocus-no-form}
+
+`X` writes `generateNavigators = true`, and its field `y` holds another `@GenerateFocus` record, `T`. `T` has a field named like a no-argument method that only a wider path has: `headOption` or `toTraversal` on a `TraversalPath`, or `toAffine` on an `AffinePath`. `y` keeps its own navigator, but not its form for that path, so a hop into `y` from such a path returns the plain path. The note names `AffineForm` where that is the form left out. It goes to `X`, which declares `y`, since the form belongs to `y`'s navigator; a record whose hop into `y` returns the plain path is not told.
+
+**Fix.** Rename the field of `T`, as the note says, and the navigator gets its form. To keep the name and go without the form, drop `generateNavigators = true` from `X`, since it is the default, and the note goes with it.
+
+~~~admonish note title="Why" collapsible=true
+A form is a navigator over the wider path, so it has that path's methods, and a navigation method of the same name would clash with one. Leaving the field out of the form would let `channels().feed().headOption()`, from a `List<Channel>`, compile against the path's own `headOption()`, which reads the first feed. So the form is left out. It is a note rather than an error because `y`'s own navigator is generated, and every hop from a path of its own type still chains.
+~~~
+
+~~~admonish example title="A declaration that draws it" collapsible=true
+<!-- verify:reports "the navigator for 'Channel.feed' has no TraversalForm" -->
+```java
+@GenerateFocus
+record Feed(String name, String headOption) {}
+
+@GenerateFocus(generateNavigators = true)
+record Channel(Feed feed) {}
+```
+
+```
+Note: @GenerateFocus: the navigator for 'Channel.feed' has no TraversalForm. A TraversalForm would be a TraversalPath, which has its own headOption(), so it could not navigate to 'Feed.headOption', and a hop into 'feed' from a TraversalPath returns a plain TraversalPath. Rename 'Feed.headOption' to give the navigator for 'feed' a TraversalForm, or remove generateNavigators = true from @GenerateFocus on Channel to go without this note.
 ```
 ~~~
 
@@ -505,6 +618,116 @@ record Hawker(String name, Kiosk kiosk) {}
 
 ```
 error: @GenerateFocus: includeFields on Hawker names "kisok", which is not a component of Hawker. includeFields gives navigators only to the components it names, so a name that matches none gives no component a navigator. Did you mean 'kiosk'? Found on Hawker: [name, kiosk]. Replace "kisok" with "kiosk" in includeFields on Hawker.
+```
+~~~
+
+### "@GenerateFocus: includeFields on X names \"y\", whose field has no navigator" (a warning) {#generatefocus-includefields-no-navigator}
+
+The name matches a component, but that component has no navigator. A `String`, a `List<String>` and a record without `@GenerateFocus` have no navigator target. A `List`, `Set`, `Collection`, `Optional` or `Maybe` of `@GenerateFocus` records has one, as do such containers nested in one another and a `Kind` the processor traverses. A `Map`, an array of records or another supported container has one only where the declaring record widens it.
+
+**Fix.** Name a field that can return a navigator, from those the warning lists. For an unannotated record compiled alongside it, annotate its type with `@GenerateFocus`. The warning offers this only where the annotation alone gives the field a navigator, never for a record from a library or another module. For an unwidened container, add the field to `widenFields`. Where no field can navigate, remove `includeFields` and set `generateNavigators = false`. Follow the warning's fix line: leaving `includeFields` in place with navigators off draws a different warning.
+
+A non-empty `includeFields` gives navigators only to the fields it names, so naming an ineligible field also takes navigators away from every eligible field it leaves out. The warning points at the offending name and stops a `-Werror` build. A field already explained by a target note or error gets no additional warning. The [unwidened-container note](#generatefocus-no-navigator-over-elements) becomes this warning when `includeFields` names the field.
+
+- An unwidened `Map<String, Box<?>>`, with `Box<T>` annotated, is offered `widenFields` to step into its `Box` elements. That alone gives no navigator: the existing wildcard-target note then offers a concrete `Box<Object>`.
+- A `Map<String, ? extends Kiosk>` holds `Kiosk` records, but its wildcard prevents widening. Write `Map<String, Kiosk>` and add the field to `widenFields`, as the warning says.
+- A `List`, `Optional` or other container the method steps into, holding a record without `@GenerateFocus`, is offered the annotation, as a field of that record is.
+- Another field's name may differ from this one's only in the case of its first letter. If that field has a navigator, or would gain one from the same fix, the fix asks for one of the two to be [renamed first](#generatefocus-navigator-shares-class-name). A later field that would only gain one counts under `generateNavigators = true`, where the clash is an error.
+- When several entries need a replacement, the first in list order receives it and the rest are offered removal. If another entry has a navigator or a correction of its own, remove the invalid name instead. Following all fix lines leaves one list without duplicate names.
+
+~~~admonish example title="A valid name whose field has no navigator"
+<!-- verify:reports "includeFields on Hawker names" -->
+```java
+@GenerateFocus
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "id")
+record Hawker(String id, Kiosk kiosk) {}
+```
+
+```
+warning: @GenerateFocus: includeFields on Hawker names "id", whose field has no navigator. Navigator generation cannot reach a @GenerateFocus record through String. It needs a @GenerateFocus record or a supported container of one. Replace "id" in includeFields on Hawker with a navigator field from [kiosk].
+```
+
+The offered field gives a navigator:
+
+<!-- verify -->
+```java
+@GenerateFocus
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "kiosk")
+record Hawker(String id, Kiosk kiosk) {}
+```
+~~~
+
+~~~admonish example title="A container that needs widening"
+<!-- verify:reports "Hawker does not widen" -->
+```java
+@GenerateFocus
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "sites")
+record Hawker(java.util.Map<String, Kiosk> sites) {}
+```
+
+```
+warning: @GenerateFocus: includeFields on Hawker names "sites", whose field has no navigator. A navigator steps into a container only where the record widens it, and Hawker does not widen "sites". Add widenFields = "sites" to @GenerateFocus on Hawker.
+```
+~~~
+
+~~~admonish example title="A wildcard container and its combined correction"
+<!-- verify:reports "holds Kiosk records, but its wildcard type arguments prevent widening" -->
+```java
+@GenerateFocus
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "sites")
+record Hawker(java.util.Map<String, ? extends Kiosk> sites, Kiosk kiosk) {}
+```
+
+```
+warning: @GenerateFocus: includeFields on Hawker names "sites", whose field has no navigator. Map<String, ? extends Kiosk> holds Kiosk records, but its wildcard type arguments prevent widening as written. Write Map<String, Kiosk> in place of Map<String, ? extends Kiosk> and add widenFields = "sites" to @GenerateFocus on Hawker.
+```
+
+Write the concrete type and widen the field together:
+
+<!-- verify -->
+```java
+@GenerateFocus
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "sites", widenFields = "sites")
+record Hawker(java.util.Map<String, Kiosk> sites, Kiosk kiosk) {}
+
+var towns = HawkerFocus.sites().town();
+```
+~~~
+
+~~~admonish example title="A list of a record without the annotation"
+<!-- verify:reports "Alternatively, annotate record Kiosk with @GenerateFocus" -->
+```java
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "sites")
+record Hawker(java.util.List<Kiosk> sites) {}
+```
+
+```
+warning: @GenerateFocus: includeFields on Hawker names "sites", whose field has no navigator. Kiosk is a record without @GenerateFocus. Navigator generation cannot reach a @GenerateFocus record through List<Kiosk>. It needs a @GenerateFocus record or a supported container of one. Remove includeFields and set generateNavigators = false in @GenerateFocus on Hawker. Alternatively, annotate record Kiosk with @GenerateFocus.
+```
+
+Annotate the record, and the list navigates into it:
+
+<!-- verify -->
+```java
+@GenerateFocus
+record Kiosk(String town) {}
+
+@GenerateFocus(includeFields = "sites")
+record Hawker(java.util.List<Kiosk> sites) {}
+
+var towns = HawkerFocus.sites().town();
 ```
 ~~~
 
@@ -591,10 +814,10 @@ Selection is still deterministic, the first registered wins, but which one that 
 
 `@TraverseField` names a `Traverse` for a `Kind<F, A>` component with a declared witness, and this component is not one.
 
-**Fix.** Declare the component as the `Kind<F, A>` the `Traverse` is written for, `Kind<TreeKind.Witness, Tree>` for a `Traverse<TreeKind.Witness>`, with both type arguments given and a witness that is a type rather than a bare or `? super` wildcard, a type variable of the record, or a wildcard bounded by one; or drop the annotation and take the path the component gets on its own, applying `traverseOver` yourself where the witness is known. See [Custom `Kind` Types with `@TraverseField`](kind_field_support.md#custom-kind-types-with-traversefield).
+**Fix.** Declare the component as the `Kind<F, A>` the `Traverse` is written for, `Kind<TreeKind.Witness, Tree>` for a `Traverse<TreeKind.Witness>`, with both type arguments given and a witness that is a type rather than a bare or `? super` wildcard, a type variable of the record, or a wildcard bounded by one; or drop the annotation and take the path the component gets on its own, widening it yourself with `each(EachInstances.fromTraverse(traverse))` where the witness is known. See [Custom `Kind` Types with `@TraverseField`](kind_field_support.md#custom-kind-types-with-traversefield).
 
 ~~~admonish note title="Why" collapsible=true
-The second sentence says which way: the component is not declared as a `Kind` at all (`List<String> is not declared as a Kind<F, A> component`), the `Kind` is written raw and so names neither a witness nor an element, its witness is a bare or `? super` wildcard (`Kind<?, String>`) that stands for no type and so names no `Traverse` instance, or its witness is one of the record's own type variables (`Kind<F, String>` in a `Holder<F>`, or `Kind<? extends F, String>`, whose wildcard resolves to `F`), which stands for any witness, while a `Traverse` is written for one. The component keeps the path it would have had without the annotation, a plain `FocusPath`, or `.each()` for a `List`, which compiles and is correct as far as it goes; what is missing is the traversal the annotation asked for.
+The second sentence says which way: the component is not declared as a `Kind` at all (`List<String> is not declared as a Kind<F, A> component`), the `Kind` is written raw and so names neither a witness nor an element, its witness is a bare or `? super` wildcard (`Kind<?, String>`) that stands for no type and so names no `Traverse` instance, or its witness is one of the record's own type variables (`Kind<F, String>` in a `Holder<F>`, or `Kind<? extends F, String>`, whose wildcard resolves to `F`), which stands for any witness, while a `Traverse` is written for one. The component keeps the path it would have had without the annotation, a plain `FocusPath`, or `.each(EachInstances.listEach())` for a `List`, which compiles and is correct as far as it goes; what is missing is the traversal the annotation asked for.
 
 It is a note rather than an error because nothing is broken: the generated class is sound, and the same declaration without the annotation passes without comment. A warning cannot be suppressed and would fail a `-Werror` build with no remedy short of editing the record.
 ~~~
@@ -613,7 +836,7 @@ record Inbox(
 
 The component is a `Kind<F, A>` whose witness is one of Higher-Kinded-J's own, but not one the Focus processor has a `Traverse` registered for. Nothing widens it, so the generated method is a plain `FocusPath` focusing the `Kind`.
 
-**Fix.** Add `@TraverseField` naming the `Traverse` instance for the witness, or keep the plain path and apply `traverseOver` yourself. See [Kind Field Support](kind_field_support.md#convention-based-detection).
+**Fix.** Add `@TraverseField` naming the `Traverse` instance for the witness, or keep the plain path and widen it yourself with `each(EachInstances.fromTraverse(traverse))`. See [Kind Field Support](kind_field_support.md#convention-based-detection).
 
 ~~~admonish note title="Why" collapsible=true
 A witness of your own draws no note, since not traversing it is an ordinary choice; a library witness with no registered `Traverse` is a gap you would want to hear about. The note is written once for the component, however many navigators reach the record.
@@ -2040,12 +2263,12 @@ interface FeeOpticsSpec extends OpticsSpec<Fee> {
 
 ### "@ImportOptics: '...' pairs more than one wither with the field '...'" (a note)
 
-A class imported by class literal spells one field's accessor more than one way, and has a wither for each: `int n()` with `withN(int)`, and `String getN()` with `withN(String)`. Both pair with the field `n`, and a class can carry only one lens of that name.
+A class imported by class literal spells one field's accessor more than one way, and has a wither for each: `int n()` with `withN(int)`, and `String getN()` with `withN(String)`. Both pair with the field `n`, and a class can carry only one lens of that name. A class with both `withEMail` and the JavaBeans `witheMail` draws the note too, since both set the field `eMail`.
 
 **Fix.** Nothing, where the lens you wanted is the one generated: the note says which. Where you wanted the other, import the type through a [spec interface](optics_spec_interfaces.md) and name the pair yourself with `@Wither(value = "withN", getter = "getN")`, importing it there rather than by class literal, or the note stays on every build.
 
 ~~~admonish note title="Why" collapsible=true
-The pairing rule tries the accessor spellings in order, `n()`, then `getN()`, then `isN()`, and the first that matches is the one generated. Reading them in that order rather than in the order the class happens to declare its members means the same class always yields the same lens. A note rather than a warning, because the class is someone else's to spell, and a note does not fail a `-Werror` build.
+The pairing rule tries the accessor spellings in order, `n()`, then `getN()`, then `isN()`, and the first that matches is the one generated. Reading them in that order rather than in the order the class happens to declare its members means the same class always yields the same lens. Where two withers pair with one getter, the processor prefers the capitalised spelling, `withEMail` ahead of `witheMail`, for the same reason. A note rather than a warning, because the class is someone else's to spell, and a note does not fail a `-Werror` build.
 ~~~
 
 ~~~admonish example title="A declaration that produces it" collapsible=true
@@ -2371,16 +2594,16 @@ interface Orders {
 
 `traverseOver` takes its witness type from the `Traverse` argument, but its element type only from where the result goes. In a chain such as `.traverseOver(...).getAll(user)`, the element type falls back to `Object`, and javac reports `incompatible types: List<Object> cannot be converted to List<Role>`.
 
-**Fix.** Assign the result to a declared `TraversalPath`, or state both type parameters where the call sits in a chain:
+**Fix.** Widen through `each(EachInstances.fromTraverse(...))`, which takes the element type from the `Kind` the path focuses on, so it holds in a chain too:
 
 <!-- verify -->
 ```java
 TraversalPath<Operator, Role> allRoles =
-    rolesPath.<ListKind.Witness, Role>traverseOver(ListTraverse.INSTANCE);
+    rolesPath.each(EachInstances.fromTraverse(ListTraverse.INSTANCE));
 ```
 
 ~~~admonish note title="Why" collapsible=true
-The element type appears only in the return type, so Java can infer it only from a target type, such as the variable the result is assigned to. The phantom error type in [Effect §1](../effect/compiler_errors.md#1-the-phantom-error-type-e-on-pathright) is inferred the same way. The receiver of a further method call is not a target, so the element type takes its bound, `Object`. The witness is never the problem, since the `Traverse<F>` argument fixes it. [Focus DSL Reference](focus_reference.md#object-turns-up-after-traverseover) shows the failing chain beside both fixes.
+`traverseOver`'s element type appears only in its return type, so Java can infer it only from a target type, such as the variable the result is assigned to. The phantom error type in [Effect §1](../effect/compiler_errors.md#1-the-phantom-error-type-e-on-pathright) is inferred the same way. The receiver of a further method call is not a target, so the element type takes its bound, `Object`. `fromTraverse` returns an `Each` typed from the `Kind` it reads, as every `Each` is, so the path's own focus fixes the element. `traverseOver` is deprecated for removal in 0.6.0. [Focus DSL Reference](focus_reference.md#object-turns-up-after-traverseover) shows the failing chain beside the fix.
 ~~~
 
 ### "Incompatible types when chaining .each().via()"
@@ -2401,24 +2624,56 @@ A generated accessor for a collection component is *already* element-level, so `
 ~~~
 
 ~~~admonish warning title="The extra `.each()` compiles"
-`each()` is `<E> TraversalPath<S, E>` and infers `E` from the assignment target, so a surplus hop type-checks and then fails at runtime when the list traversal is applied to something that is not a list. It is not caught by the compiler, which is why it belongs on this page rather than in a debugging note.
+The untyped `each()` is `<E> TraversalPath<S, E>` and infers `E` from the assignment target, so a surplus hop type-checks and then fails at runtime when the list traversal is applied to something that is not a list. It is deprecated for removal in 0.6.0. Its typed form, `each(EachInstances.listEach())`, does not compile on a focus that is not a `List`.
 ~~~
 
 ### "Cannot infer type argument(s)" on an intermediate `.each()`
 
-Only the *final* `each()` in a chain can infer its element type from the target type. An intermediate one has nothing to infer from.
+Only the *final* untyped `each()` in a chain can infer its element type from the target type. An intermediate one has nothing to infer from.
 
-**Fix.** Spell the element type at the intermediate hop:
+**Fix.** Use the typed form at each hop. It takes the element type from the `List` the path focuses on, so no hop needs it spelled out:
 
 <!-- verify -->
 ```java
 TraversalPath<OrgChart, Integer> allSalaries =
     FocusPath.of(OrgChartLenses.units())
-        .<OrgUnit>each()
+        .each(EachInstances.listEach())
         .via(OrgUnitLenses.members())
-        .<OrgMember>each()
+        .each(EachInstances.listEach())
         .via(OrgMemberLenses.salary());
 ```
+
+### "No suitable method found for each(...)" on a typed step {#no-suitable-method-found-for-each}
+
+The path does not focus on the container the step names: `EachInstances.listEach()` takes a path that focuses on a `List`, and `FocusPaths.optionalSome()` one that focuses on an `Optional`.
+
+**Fix.** Give the step the instance for what the path does focus on. A generated collection path already focuses on each element, so it needs no step of its own, and a `Set`, a `Map` or another container takes its own `Each`. A path over a `List<? extends T>` takes an `Iso` to `List<T>` first, and one over a `Kind<F, ? extends T>` an `Iso` to `Kind<F, T>`, as [0.6.0 deprecation migration](../tooling/openrewrite.md#060-deprecation-migration) shows.
+
+<!-- verify:rejects "no suitable method found for each" -->
+```java
+// Rejected: the generated path already focuses on each OrgUnit, not on a List
+TraversalPath<OrgChart, OrgUnit> units = OrgChartFocus.units().each(EachInstances.listEach());
+```
+
+~~~admonish note title="Why" collapsible=true
+`listEach()` is an `Each<List<A>, A>`, and `each` takes an `Each` whose first type is the path's focus, so javac looks for an `A` that makes `List<A>` an `OrgUnit` and finds none. The deprecated no-argument `each()` compiled here, because it does not read its element type from the focus, and failed with `ClassCastException` when it ran. `some(FocusPaths.optionalSome())` on a focus that is not an `Optional`, and `via(FocusPaths.listAt(0))` on one that is not a `List`, give the same message, naming `some` or `via`.
+~~~
+
+### "each() in org.higherkindedj.optics.focus.FocusPath has been deprecated and marked for removal" (a warning) {#untyped-shortcut-marked-for-removal}
+
+A Focus path's no-argument `each()`, `some()`, `head()`, `last()`, `tail()`, `init()`, `cons()`, `snoc()`, `headTail()` or `initLast()` is deprecated for removal in 0.6.0, and so are its `at(index)`, `atKey(key)` and `traverseOver(traverse)`. The warning names the method and the path type, a navigator included.
+
+**Fix.** Write its typed form: the same verb, given an instance that names the container, such as `each(EachInstances.listEach())` or `some(FocusPaths.optionalSome())`. [Removals in 0.6.0](../release-history/upgrading.md#removals-in-060) gives each one. The `MigrateDeprecationsTo0_6_0` recipe rewrites the calls it can and marks the rest, as [0.6.0 deprecation migration](../tooling/openrewrite.md#060-deprecation-migration) says.
+
+<!-- verify:reports "each() in org.higherkindedj.optics.focus.FocusPath has been deprecated and marked for removal" -->
+```java
+// Warned: each() takes its element type from the assignment, not from the path
+TraversalPath<OrgChart, OrgUnit> units = FocusPath.of(OrgChartLenses.units()).each();
+```
+
+~~~admonish note title="Why" collapsible=true
+The shortcut does not read its element type from the path's focus. So it compiles on any focus, and fails with `ClassCastException` when it runs on one that is not its container. The typed form reads the element from the focus, so on the wrong focus it does not compile, with [No suitable method found for each(...)](#no-suitable-method-found-for-each). The warning fails a build only under `-Werror`.
+~~~
 
 ### "Method reference ::new doesn't work with single-field records as BiFunction"
 

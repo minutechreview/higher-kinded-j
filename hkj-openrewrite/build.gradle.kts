@@ -8,13 +8,16 @@ plugins {
 
 dependencies {
     // OpenRewrite core dependencies
-    compileOnly("org.openrewrite:rewrite-java:8.75.5")
-    compileOnly("org.openrewrite:rewrite-core:8.75.5")
+    compileOnly(libs.rewrite.java)
+    compileOnly(libs.rewrite.core)
 
     // Required for recipe testing
-    testImplementation("org.openrewrite:rewrite-java:8.75.5")
-    testImplementation("org.openrewrite:rewrite-test:8.75.5")
-    testImplementation("org.openrewrite:rewrite-java-25:8.75.5")
+    testImplementation(libs.rewrite.java)
+    testImplementation(libs.rewrite.test)
+    testImplementation(libs.rewrite.java25)
+    // To read the path methods a 0.5.0 navigator inherits, which a recipe keeps a copy of, and to
+    // parse a recipe test against the real library
+    testRuntimeOnly(project(":hkj-core"))
 
     // Testing dependencies
     testImplementation(platform(libs.junit.bom))

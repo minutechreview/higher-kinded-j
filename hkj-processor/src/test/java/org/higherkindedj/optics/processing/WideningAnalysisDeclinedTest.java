@@ -59,16 +59,22 @@ class WideningAnalysisDeclinedTest {
           public record Holder(
               Either<String, ?> either,
               Map<String, ?> map,
+              Map<String, ? extends Leaf> bounded,
+              Map rawMap,
               Set<?> set,
-              Set raw,
+              Set rawSet,
+              Either raw,
               Optional<Either<String, ?>> nested,
               Map<String, Either<String, ?>> beneath,
               List<String> list,
-              @Nullable Set<?> nullable) {}
+              @Nullable Either<String, ?> nullable) {}
+          record Leaf(String value) {}
           """);
 
   /** What the analysis says of each Holder component, by name, with collections left alone. */
   private static Map<String, Widening> leftAlone;
+
+  private static final Map<String, String> refusedElements = new LinkedHashMap<>();
 
   /** The same, with collections stepped into. */
   private static Map<String, Widening> steppedInto;
@@ -107,6 +113,14 @@ class WideningAnalysisDeclinedTest {
         for (RecordComponentElement component : holder.getRecordComponents()) {
           widenings.put(
               component.getSimpleName().toString(), analysis.analyse(component, widenCollections));
+          if (analysis.spiLookup(component.asType())
+              instanceof WideningAnalysis.SpiLookup.Refused refused) {
+            refusedElements.put(
+                component.getSimpleName().toString(),
+                refused.element() == null
+                    ? "none"
+                    : ProcessorUtils.simpleTypeName(refused.element()));
+          }
         }
         return false;
       }
@@ -115,6 +129,15 @@ class WideningAnalysisDeclinedTest {
     Compilation compilation = javac().withProcessors(new Probe()).compile(HOLDER);
     assertThat(compilation).succeeded();
     return Map.copyOf(widenings);
+  }
+
+  @Test
+  @DisplayName("a refused lookup carries its resolved element without exposing its generator")
+  void refusedLookupRetainsElement() {
+    org.assertj.core.api.Assertions.assertThat(refusedElements)
+        .containsEntry("bounded", "Leaf")
+        .containsEntry("map", "none")
+        .containsEntry("rawMap", "none");
   }
 
   /** The declined container as the diagnostic would name it, or null. */
@@ -130,8 +153,7 @@ class WideningAnalysisDeclinedTest {
   @DisplayName("names the container it turned away")
   void namesTheContainerItTurnedAway() {
     assertThat(declined(leftAlone.get("either"))).isEqualTo("Either<String, ?>");
-    assertThat(declined(leftAlone.get("set"))).isEqualTo("Set<?>");
-    assertThat(declined(leftAlone.get("raw"))).isEqualTo("Set");
+    assertThat(declined(leftAlone.get("raw"))).isEqualTo("Either");
     assertThat(declined(leftAlone.get("nested"))).isEqualTo("Either<String, ?>");
   }
 
@@ -139,6 +161,9 @@ class WideningAnalysisDeclinedTest {
   @DisplayName("turns nothing away that it widened or left alone")
   void turnsNothingAwayThatItWidenedOrLeftAlone() {
     assertThat(declined(leftAlone.get("list"))).isNull();
+    // A raw or wildcard recognised container casts its instance to the container as written.
+    assertThat(declined(leftAlone.get("set"))).isNull();
+    assertThat(declined(leftAlone.get("rawSet"))).isNull();
     // A ZERO_OR_MORE container is not stepped into by default, so neither it nor the container
     // beneath it is ever asked for an optic.
     assertThat(declined(leftAlone.get("map"))).isNull();
@@ -186,7 +211,7 @@ class WideningAnalysisDeclinedTest {
   void keepsTheNullableWideningOfANullableComponentItTurnedAway() {
     Widening nullable = leftAlone.get("nullable");
 
-    assertThat(declined(nullable)).isEqualTo("Set<?>");
+    assertThat(declined(nullable)).isEqualTo("Either<String, ?>");
     assertThat(kinds(nullable)).containsExactly(StepKind.NULLABLE);
     assertThat(nullable.tier()).isEqualTo(Tier.AFFINE);
   }

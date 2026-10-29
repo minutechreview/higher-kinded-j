@@ -1,22 +1,30 @@
 # Upgrading
 
-Sections run newest first: start at the top and read down to the section for the release after the one you are on. Each lists what the release notes flag as able to stop a build that compiled, or to change what a program does. [Removals in 0.5.0](#removals-in-050) lists every API due to go in the next minor release, with the recipe that migrates it, and [Removals in 0.6.0](#removals-in-060) those due in the release after.
+Sections run newest first: start at the top and read down to the section for the release after the one you are on. Each lists what the release notes flag as able to stop a build that compiled, or to change what a program does. [Removals in 0.6.0](#removals-in-060) lists every API due to go in the next minor release, with the recipe that migrates it, and [Removals in 0.5.0](#removals-in-050) those 0.5.0 removed.
 
 ---
 
 ## Removals in 0.6.0 {#removals-in-060}
 
-Each of these compiles with javac's `[removal]` warning, which fails a `-Werror` build.
+Each of these compiles with javac's `[removal]` warning, which fails a `-Werror` build. A Focus path shortcut's replacement is its typed form: the same verb, given an instance that reads the element type from the path. So a typed form fits only a path that focuses on its container exactly. The `org.higherkindedj.openrewrite.MigrateDeprecationsTo0_6_0` recipe runs every recipe the table names, and marks each call a typed form does not fit rather than rewriting it. [0.6.0 deprecation migration](../tooling/openrewrite.md#060-deprecation-migration) gives each such call its replacement.
 
 | Deprecated | Since | Use instead | Recipe |
 |---|---|---|---|
+| A Focus path's `each()`, on `FocusPath`, `AffinePath`, `TraversalPath` and a navigator | 0.5.0 | `each(EachInstances.listEach())` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `some()` | 0.5.0 | `some(FocusPaths.optionalSome())` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `at(index)` | 0.5.0 | `via(FocusPaths.listAt(index))` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `atKey(key)` | 0.5.0 | `via(FocusPaths.mapAt(key))` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `traverseOver(traverse)` | 0.5.0 | `each(EachInstances.fromTraverse(traverse))` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `head()`, `last()`, `tail()` and `init()` | 0.5.0 | `via(FocusPaths.listHead())`, `via(FocusPaths.listLast())`, `via(FocusPaths.listTail())` and `via(FocusPaths.listInit())` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `cons()` and `headTail()` | 0.5.0 | `via(FocusPaths.listCons())` and `via(FocusPaths.listHeadTail())` | `ReplaceUntypedPathShortcutsRecipe` |
+| A Focus path's `snoc()` and `initLast()` | 0.5.0 | `via(FocusPaths.listSnoc())` and `via(FocusPaths.listInitLast())` | `ReplaceUntypedPathShortcutsRecipe` |
 | `ScopeJoiner.resultEither()` | 0.5.0 | `joinEither()` on the `Scope`, in place of `join()`; for a `StructuredTaskScope` you open yourself, the value its `join()` returns, or the cause of the `FailedException` it throws | By hand |
 
 ---
 
 ## Removals in 0.5.0 {#removals-in-050}
 
-Each of these compiles today with javac's `[removal]` warning, which fails a `-Werror` build. The `org.higherkindedj.openrewrite.MigrateDeprecationsTo0_5_0` recipe runs every recipe the table names; see [0.5.0 deprecation migration](../tooling/openrewrite.md#050-deprecation-migration).
+0.5.0 removed each of these. The `org.higherkindedj.openrewrite.MigrateDeprecationsTo0_5_0` recipe runs every recipe the table names, and finds each removed API only while the project is on 0.4.x, so run it before you move. See [0.5.0 deprecation migration](../tooling/openrewrite.md#050-deprecation-migration).
 
 | Deprecated | Since | Use instead | Recipe |
 |---|---|---|---|
@@ -36,9 +44,15 @@ Each of these compiles today with javac's `[removal]` warning, which fails a `-W
 
 ---
 
+## To 0.6.0 {#to-060}
+
+This release is not out yet. [Upgrading from 0.5.0](unreleased.md#upgrading) collects what it changes so far, and [Removals in 0.6.0](#removals-in-060) lists the APIs it is due to remove, with the recipe that migrates each.
+
+---
+
 ## To 0.5.0 {#to-050}
 
-This release is not out yet. Every API in [Removals in 0.5.0](#removals-in-050) is due to go in it, so migrate those first: the `MigrateDeprecationsTo0_5_0` recipe does most of the work. Its notes split what changes into what a running program can notice and what stops a build that compiled: read [Upgrading from 0.4.11](unreleased.md#upgrading) before you move.
+The 0.5.0 notes give the details in [Upgrading from 0.4.11](v0_5_0.md#upgrading). Run `MigrateDeprecationsTo0_5_0` first, while the project is still on 0.4.11, since its recipes find the APIs in [Removals in 0.5.0](#removals-in-050) only there. [Before you upgrade](v0_5_0.md#before-you-upgrade) lists that step and the others to take first. Then read [What a running program can notice](v0_5_0.md#runtime-changes), most of it about null values, because the compiler cannot point at those changes. Each entry in [What stops a build that compiled](v0_5_0.md#build-changes) fails at a line the message names, with its fix.
 
 ---
 
@@ -114,4 +128,4 @@ Besides the deprecations in [Removals in 0.5.0](#removals-in-050), the notes for
 ---
 
 **Previous:** [Release History](../release-history.md)
-**Next:** [Unreleased: 0.5.0](unreleased.md)
+**Next:** [Unreleased: 0.6.0](unreleased.md)

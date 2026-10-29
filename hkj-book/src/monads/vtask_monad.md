@@ -313,7 +313,7 @@ try {
 
 ---
 
-## Parallel Composition with Par
+## Parallel Composition with Par {#parallel-composition-with-par}
 
 The `Par` utility class provides combinators for executing VTasks concurrently:
 
@@ -455,5 +455,5 @@ See [Benchmarks & Performance](../benchmarks.md) for full details, comparison be
 
 ---
 
-**Previous:** [Accumulating Assembly](validated_assembly.md)
+**Previous:** [CompletableFuture](cf_monad.md)
 **Next:** [Structured Concurrency](vtask_scope.md)

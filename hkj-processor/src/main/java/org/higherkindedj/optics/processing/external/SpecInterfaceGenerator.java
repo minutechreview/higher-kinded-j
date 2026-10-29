@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See LICENSE.md in the project root for license information.
 package org.higherkindedj.optics.processing.external;
 
-import com.palantir.javapoet.AnnotationSpec;
 import com.palantir.javapoet.ClassName;
 import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.JavaFile;
@@ -140,8 +139,9 @@ public class SpecInterfaceGenerator {
             .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
             .returns(returnType)
             .addJavadoc(
-                "Creates a {@link $T} for the {@code $L} property of a {@link $T}.\n\n"
+                "Creates $L {@link $T} for the {@code $L} property of {@link $T}.\n\n"
                     + "@return A non-null optic instance.",
+                article(opticKind),
                 getOpticClass(opticKind),
                 methodName,
                 TypeName.get(sourceType));
@@ -175,24 +175,7 @@ public class SpecInterfaceGenerator {
             || typeParameters.stream()
                 .flatMap(parameter -> parameter.getBounds().stream())
                 .anyMatch(bound -> ProcessorUtils.firstRawIn(bound) != null);
-    // A declaration takes one @SuppressWarnings, so a method needing both reasons carries them as
-    // one array, written the way an author would write it.
-    if (rawTypes && unchecked) {
-      methodBuilder.addAnnotation(
-          AnnotationSpec.builder(SuppressWarnings.class)
-              .addMember("value", "{$S, $S}", "rawtypes", "unchecked")
-              .build());
-    } else if (rawTypes) {
-      methodBuilder.addAnnotation(
-          AnnotationSpec.builder(SuppressWarnings.class)
-              .addMember("value", "$S", "rawtypes")
-              .build());
-    } else if (unchecked) {
-      methodBuilder.addAnnotation(
-          AnnotationSpec.builder(SuppressWarnings.class)
-              .addMember("value", "$S", "unchecked")
-              .build());
-    }
+    methodBuilder.addAnnotations(ProcessorUtils.warningSuppression(rawTypes, unchecked));
 
     // Generate method body based on optic kind
     CodeBlock body =
@@ -439,6 +422,23 @@ public class SpecInterfaceGenerator {
       case ISO -> ClassName.get("org.higherkindedj.optics", "Iso");
       case GETTER -> ClassName.get("org.higherkindedj.optics", "Getter");
       case FOLD -> ClassName.get("org.higherkindedj.optics", "Fold");
+    };
+  }
+
+  /**
+   * The article an optic kind's class name takes: {@code "an"} for {@code AFFINE} and {@code ISO},
+   * {@code "a"} for every other kind.
+   *
+   * <p>It stays in this generator, not on {@link OpticKind}, because {@link SpecAnalysis} is held
+   * at full coverage.
+   *
+   * @param opticKind the optic kind
+   * @return the article
+   */
+  private static String article(OpticKind opticKind) {
+    return switch (opticKind) {
+      case AFFINE, ISO -> "an";
+      case LENS, PRISM, TRAVERSAL, GETTER, FOLD -> "a";
     };
   }
 

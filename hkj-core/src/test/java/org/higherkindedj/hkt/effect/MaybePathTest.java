@@ -284,8 +284,21 @@ class MaybePathTest {
       MaybePath<String> path = Path.just(TEST_VALUE);
 
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> path.via(s -> Path.right(s.length())))
-          .withMessageContaining("via mapper must return MaybePath");
+          .isThrownBy(() -> path.via(Mismatched.step(s -> Path.right(s.length()))))
+          .withMessageContaining(
+              "Type mismatch in via(): expected MaybePath but mapper returned EitherPath")
+          .withMessageContaining("Use conversion methods");
+    }
+
+    @Test
+    @DisplayName("via() names a VStreamPath result by its interface")
+    @SuppressWarnings("path-type-mismatch") // the mismatch is the behaviour under test
+    void viaNamesVStreamPathResult() {
+      MaybePath<String> path = Path.just(TEST_VALUE);
+
+      assertThatIllegalArgumentException()
+          .isThrownBy(() -> path.via(Mismatched.step(s -> Path.vstreamOf(s.length()))))
+          .withMessageContaining("expected MaybePath but mapper returned VStreamPath.");
     }
 
     @Test
@@ -294,9 +307,7 @@ class MaybePathTest {
       MaybePath<String> path = Path.just("hello");
 
       MaybePath<Integer> viaResult = path.via(s -> Path.just(s.length()));
-      // flatMap returns Chainable<B> from interface, but via returns MaybePath<B>
-      // Cast to MaybePath to access run() and verify they produce the same result
-      @SuppressWarnings("unchecked")
+      // flatMap returns the Chainable interface type, so cast to MaybePath to reach run()
       MaybePath<Integer> flatMapResult =
           (MaybePath<Integer>) path.flatMap(s -> Path.just(s.length()));
       assertThat(flatMapResult.run().get()).isEqualTo(viaResult.run().get());
@@ -331,8 +342,21 @@ class MaybePathTest {
       MaybePath<String> path = Path.just(TEST_VALUE);
 
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> path.then(() -> Path.right(42)))
-          .withMessageContaining("then supplier must return MaybePath");
+          .isThrownBy(() -> path.then(Mismatched.supplier(() -> Path.right(42))))
+          .withMessageContaining(
+              "Type mismatch in then(): expected MaybePath but supplier returned EitherPath")
+          .withMessageContaining("Use conversion methods");
+    }
+
+    @Test
+    @DisplayName("then() names a VTaskPath result by its interface")
+    @SuppressWarnings("path-type-mismatch") // the mismatch is the behaviour under test
+    void thenNamesVTaskPathResult() {
+      MaybePath<String> path = Path.just(TEST_VALUE);
+
+      assertThatIllegalArgumentException()
+          .isThrownBy(() -> path.then(Mismatched.supplier(() -> Path.vtaskPure(42))))
+          .withMessageContaining("expected MaybePath but supplier returned VTaskPath.");
     }
   }
 
@@ -407,8 +431,10 @@ class MaybePathTest {
       EitherPath<String, Integer> eitherPath = Path.right(TEST_INT);
 
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> path.zipWith(eitherPath, (s, i) -> s + i))
-          .withMessageContaining("Cannot zipWith non-MaybePath");
+          .isThrownBy(() -> path.zipWith(Mismatched.other(eitherPath), (s, i) -> s + i))
+          .withMessageContaining(
+              "Type mismatch in zipWith(): expected MaybePath but other was EitherPath")
+          .withMessageContaining("Use conversion methods");
     }
 
     @Test
@@ -525,10 +551,10 @@ class MaybePathTest {
       MaybePath<String> justPath = Path.just(TEST_VALUE);
       MaybePath<String> nothingPath = Path.nothing();
 
-      // mapError returns Recoverable<E2, A> from interface
+      // mapError returns Recoverable<?, E2, A> from interface
       // For MaybePath, it's effectively a no-op and returns the same instance
-      Recoverable<String, String> justResult = justPath.mapError(unit -> "error");
-      Recoverable<String, String> nothingResult = nothingPath.mapError(unit -> "error");
+      Recoverable<?, String, String> justResult = justPath.mapError(unit -> "error");
+      Recoverable<?, String, String> nothingResult = nothingPath.mapError(unit -> "error");
 
       assertThat(justResult).isSameAs(justPath);
       assertThat(nothingResult).isSameAs(nothingPath);
@@ -541,7 +567,7 @@ class MaybePathTest {
       MaybePath<String> path = Path.nothing();
 
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> path.recoverWith(unit -> Path.right("fallback")))
+          .isThrownBy(() -> path.recoverWith(Mismatched.recovery(unit -> Path.right("fallback"))))
           .withMessageContaining("recovery must return MaybePath");
     }
 
@@ -552,7 +578,7 @@ class MaybePathTest {
       MaybePath<String> path = Path.nothing();
 
       assertThatIllegalArgumentException()
-          .isThrownBy(() -> path.orElse(() -> Path.right("alternative")))
+          .isThrownBy(() -> path.orElse(Mismatched.alternative(() -> Path.right("alternative"))))
           .withMessageContaining("alternative must return MaybePath");
     }
   }

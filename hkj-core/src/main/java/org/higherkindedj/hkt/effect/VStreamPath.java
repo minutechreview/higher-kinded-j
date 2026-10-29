@@ -19,6 +19,7 @@ import org.higherkindedj.hkt.effect.capability.Chainable;
 import org.higherkindedj.hkt.effect.capability.Combinable;
 import org.higherkindedj.hkt.effect.capability.Deferred;
 import org.higherkindedj.hkt.function.Function3;
+import org.higherkindedj.hkt.nonemptylist.NonEmptyList;
 import org.higherkindedj.hkt.vstream.VStream;
 import org.higherkindedj.hkt.vtask.VTask;
 import org.higherkindedj.optics.Each;
@@ -94,7 +95,7 @@ import org.jspecify.annotations.Nullable;
  * @see VTaskPath
  * @see StreamPath
  */
-public sealed interface VStreamPath<A> extends Chainable<A>, Deferred<A>
+public sealed interface VStreamPath<A> extends Chainable<VStreamPath<?>, A>, Deferred<A>
     permits DefaultVStreamPath {
 
   // ===== Core access =====
@@ -129,22 +130,31 @@ public sealed interface VStreamPath<A> extends Chainable<A>, Deferred<A>
 
   // ===== Chainable operations (Monad) =====
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The mapper must return a {@code VStreamPath}; a step of another kind does not compile, so
+   * convert it first.
+   */
   @Override
-  <B> VStreamPath<B> via(Function<? super A, ? extends Chainable<B>> mapper);
+  <B> VStreamPath<B> via(
+      Function<? super A, ? extends Chainable<? extends VStreamPath<?>, B>> mapper);
 
   @Override
-  default <B> VStreamPath<B> flatMap(Function<? super A, ? extends Chainable<B>> mapper) {
+  default <B> VStreamPath<B> flatMap(
+      Function<? super A, ? extends Chainable<? extends VStreamPath<?>, B>> mapper) {
     return via(mapper);
   }
 
   @Override
-  <B> VStreamPath<B> then(Supplier<? extends Chainable<B>> supplier);
+  <B> VStreamPath<B> then(Supplier<? extends Chainable<? extends VStreamPath<?>, B>> supplier);
 
   // ===== Combinable operations (Applicative) =====
 
   @Override
   <B, C> VStreamPath<C> zipWith(
-      Combinable<B> other, BiFunction<? super A, ? super B, ? extends C> combiner);
+      Combinable<? extends VStreamPath<?>, B> other,
+      BiFunction<? super A, ? super B, ? extends C> combiner);
 
   /**
    * Combines this path with two others using a ternary function. Elements are paired positionally;
@@ -369,15 +379,15 @@ public sealed interface VStreamPath<A> extends Chainable<A>, Deferred<A>
   // ===== Chunking operations =====
 
   /**
-   * Groups elements into lists of at most {@code size} elements.
+   * Groups elements into non-empty lists of at most {@code size} elements.
    *
    * <p>Delegates to {@link VStream#chunk(int)}.
    *
    * @param size the maximum number of elements per chunk; must be positive
-   * @return a new VStreamPath of element lists
+   * @return a new VStreamPath of non-empty element lists
    * @throws IllegalArgumentException if size is not positive
    */
-  VStreamPath<List<A>> chunk(int size);
+  VStreamPath<NonEmptyList<A>> chunk(int size);
 
   /**
    * Chunks the stream, applies a batch function to each chunk, and flattens the results.
@@ -385,13 +395,13 @@ public sealed interface VStreamPath<A> extends Chainable<A>, Deferred<A>
    * <p>Delegates to {@link VStream#mapChunked(int, java.util.function.Function)}.
    *
    * @param size the maximum number of elements per batch; must be positive
-   * @param f the batch function to apply; must not be null
+   * @param f the batch function to apply to each non-empty chunk; must not be null
    * @param <B> the type of elements in the output
    * @return a new VStreamPath with transformed elements
    * @throws IllegalArgumentException if size is not positive
    * @throws NullPointerException if f is null
    */
-  <B> VStreamPath<B> mapChunked(int size, Function<List<A>, List<B>> f);
+  <B> VStreamPath<B> mapChunked(int size, Function<? super NonEmptyList<A>, ? extends List<B>> f);
 
   /**
    * Collects all elements in parallel batches. This is a terminal operation.

@@ -20,6 +20,7 @@ import org.higherkindedj.hkt.either.Either;
 import org.higherkindedj.hkt.free.Free;
 import org.higherkindedj.hkt.free.FreeKind;
 import org.higherkindedj.hkt.free.FreeKindHelper;
+import org.higherkindedj.hkt.function.Function3;
 
 /**
  * A fluent path wrapper for {@link Free} monad computations.
@@ -60,7 +61,7 @@ import org.higherkindedj.hkt.free.FreeKindHelper;
  * @param <A> the result type
  */
 public final class FreePath<F extends WitnessArity<TypeArity.Unary>, A>
-    implements Chainable<A>, Deferred<A> {
+    implements Chainable<FreePath<F, ?>, A>, Deferred<A> {
 
   private final Free<F, A> free;
   private final Functor<F> functor;
@@ -225,7 +226,8 @@ public final class FreePath<F extends WitnessArity<TypeArity.Unary>, A>
   @Override
   @SuppressWarnings("unchecked")
   public <B, C> FreePath<F, C> zipWith(
-      Combinable<B> other, BiFunction<? super A, ? super B, ? extends C> combiner) {
+      Combinable<? extends FreePath<F, ?>, B> other,
+      BiFunction<? super A, ? super B, ? extends C> combiner) {
     Objects.requireNonNull(other, "other must not be null");
     Objects.requireNonNull(combiner, "combiner must not be null");
 
@@ -241,16 +243,57 @@ public final class FreePath<F extends WitnessArity<TypeArity.Unary>, A>
                     Objects.requireNonNull(combiner.apply(a, b), "combiner must not return null")));
   }
 
+  /**
+   * Combines this FreePath with two others using a ternary function.
+   *
+   * <p>The three computations stay suspended until the program is interpreted, so the combine is
+   * stack-safe.
+   *
+   * @param second the second FreePath; must not be null
+   * @param third the third FreePath; must not be null
+   * @param combiner the function to combine the three values; must not be null, and must not return
+   *     null
+   * @param <B> the type of the second value
+   * @param <C> the type of the third value
+   * @param <D> the type of the combined result
+   * @return a FreePath containing the combined result
+   * @throws NullPointerException if any argument is null
+   */
+  public <B, C, D> FreePath<F, D> zipWith3(
+      FreePath<F, B> second,
+      FreePath<F, C> third,
+      Function3<? super A, ? super B, ? super C, ? extends D> combiner) {
+    Objects.requireNonNull(second, "second must not be null");
+    Objects.requireNonNull(third, "third must not be null");
+    Objects.requireNonNull(combiner, "combiner must not be null");
+
+    return via(
+        a ->
+            second.via(
+                b ->
+                    third.map(
+                        c ->
+                            Objects.requireNonNull(
+                                combiner.apply(a, b, c), "combiner must not return null"))));
+  }
+
   // ===== Chainable Implementation =====
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>The mapper must return a {@code FreePath} over the same functor {@code F}; another kind of
+   * Path or functor does not compile.
+   */
   @Override
   @SuppressWarnings("unchecked")
-  public <B> FreePath<F, B> via(Function<? super A, ? extends Chainable<B>> mapper) {
+  public <B> FreePath<F, B> via(
+      Function<? super A, ? extends Chainable<? extends FreePath<F, ?>, B>> mapper) {
     Objects.requireNonNull(mapper, "mapper must not be null");
     Free<F, B> flatMapped =
         free.flatMap(
             a -> {
-              Chainable<B> result = mapper.apply(a);
+              Chainable<? extends FreePath<F, ?>, B> result = mapper.apply(a);
               Objects.requireNonNull(result, "mapper must not return null");
 
               if (!(result instanceof FreePath<?, ?> fp)) {
@@ -263,7 +306,8 @@ public final class FreePath<F extends WitnessArity<TypeArity.Unary>, A>
   }
 
   @Override
-  public <B> FreePath<F, B> then(Supplier<? extends Chainable<B>> supplier) {
+  public <B> FreePath<F, B> then(
+      Supplier<? extends Chainable<? extends FreePath<F, ?>, B>> supplier) {
     Objects.requireNonNull(supplier, "supplier must not be null");
     return via(_ -> supplier.get());
   }

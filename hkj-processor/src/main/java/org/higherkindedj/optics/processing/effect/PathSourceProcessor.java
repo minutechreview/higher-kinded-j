@@ -214,8 +214,7 @@ public class PathSourceProcessor extends AbstractProcessor {
     String packageName = targetPackage.isEmpty() ? defaultPackage : targetPackage;
     String suffix = annotation.suffix();
     String pathClassName = sourceName + suffix;
-    PathSource.Capability written = annotation.capability();
-    PathSource.Capability capability = generatedLevel(written);
+    PathSource.Capability capability = annotation.capability();
 
     // Get witness type (using MirroredTypeException pattern)
     TypeMirror witnessTypeMirror = getWitnessType(annotation);
@@ -269,7 +268,7 @@ public class PathSourceProcessor extends AbstractProcessor {
                 noteRecoveryMismatch(
                     sourceElement,
                     mirror,
-                    written,
+                    capability,
                     hasErrorType,
                     witnessTypeMirror,
                     errorTypeMirror,
@@ -295,7 +294,7 @@ public class PathSourceProcessor extends AbstractProcessor {
             .addOriginatingElement(sourceElement);
 
     // Add the interface implementation for the capability
-    classBuilder.addSuperinterface(capabilityInterface(capability, typeA));
+    classBuilder.addSuperinterface(capabilityInterface(capability, typeA, pathClassName));
 
     // Add the wrapped value field
     ParameterizedTypeName kindType = ParameterizedTypeName.get(KIND, witnessType, typeA);
@@ -599,12 +598,12 @@ public class PathSourceProcessor extends AbstractProcessor {
   private void noteRecoveryMismatch(
       TypeElement source,
       AnnotationMirror mirror,
-      PathSource.Capability written,
+      PathSource.Capability capability,
       boolean hasErrorType,
       TypeMirror witness,
       TypeMirror errorType,
       String pathClassName) {
-    boolean recoverable = isRecoverable(generatedLevel(written));
+    boolean recoverable = isRecoverable(capability);
     if (hasErrorType && !recoverable) {
       String errorName = ProcessorUtils.simpleTypeName(errorType);
       report(
@@ -614,8 +613,8 @@ public class PathSourceProcessor extends AbstractProcessor {
           "errorType",
           "errorType '" + errorName + "' has no effect on the generated '" + pathClassName + "'",
           (ProcessorUtils.getAnnotationValue(mirror, "capability") == null
-                  ? "The default capability, " + written + ","
-                  : "Capability " + written)
+                  ? "The default capability, " + capability + ","
+                  : "Capability " + capability)
               + " generates no recovery methods; recover, recoverWith and mapError are generated"
               + " only for RECOVERABLE.",
           usableErrorType(errorType)
@@ -635,7 +634,7 @@ public class PathSourceProcessor extends AbstractProcessor {
           mirror,
           "capability",
           "capability "
-              + written
+              + capability
               + " generates no recovery methods on '"
               + pathClassName
               + "' without an errorType",
@@ -699,19 +698,6 @@ public class PathSourceProcessor extends AbstractProcessor {
             ProcessorUtils.getAnnotationValue(mirror, attribute));
   }
 
-  /**
-   * The level whose methods a capability generates. The deprecated levels generate exactly what
-   * CHAINABLE and RECOVERABLE do, so replacing them changes nothing generated.
-   */
-  @SuppressWarnings("removal") // the deprecated levels generate until they are removed
-  static PathSource.Capability generatedLevel(PathSource.Capability capability) {
-    return switch (capability) {
-      case EFFECTFUL -> PathSource.Capability.CHAINABLE;
-      case ACCUMULATING -> PathSource.Capability.RECOVERABLE;
-      case COMPOSABLE, COMBINABLE, CHAINABLE, RECOVERABLE -> capability;
-    };
-  }
-
   // Package-private for tests.
   static TypeMirror getWitnessType(PathSource annotation) {
     try {
@@ -738,12 +724,19 @@ public class PathSourceProcessor extends AbstractProcessor {
    * recover/recoverWith/mapError) itself.
    */
   private static TypeName capabilityInterface(
-      PathSource.Capability capability, TypeVariableName typeA) {
-    return ParameterizedTypeName.get(
-        capability == PathSource.Capability.COMPOSABLE ? COMPOSABLE : COMBINABLE, typeA);
+      PathSource.Capability capability, TypeVariableName typeA, String pathClassName) {
+    if (capability == PathSource.Capability.COMPOSABLE) {
+      return ParameterizedTypeName.get(COMPOSABLE, typeA);
+    }
+    return ParameterizedTypeName.get(COMBINABLE, family(pathClassName), typeA);
   }
 
-  // Each takes a level from generatedLevel, which never answers a deprecated one.
+  /** The Path family a generated class names in Combinable: itself, with its value unknown. */
+  private static TypeName family(String pathClassName) {
+    return ParameterizedTypeName.get(
+        ClassName.get("", pathClassName), WildcardTypeName.subtypeOf(Object.class));
+  }
+
   private boolean isChainable(PathSource.Capability capability) {
     return capability == PathSource.Capability.CHAINABLE
         || capability == PathSource.Capability.RECOVERABLE;
@@ -1060,7 +1053,10 @@ public class PathSourceProcessor extends AbstractProcessor {
         .addTypeVariable(typeB)
         .addTypeVariable(typeC)
         .returns(ParameterizedTypeName.get(pathClass, typeC))
-        .addParameter(ParameterizedTypeName.get(COMBINABLE, typeB), "other")
+        .addParameter(
+            ParameterizedTypeName.get(
+                COMBINABLE, WildcardTypeName.subtypeOf(family(pathClassName)), typeB),
+            "other")
         .addParameter(
             ParameterizedTypeName.get(
                 BI_FUNCTION,
@@ -1070,12 +1066,12 @@ public class PathSourceProcessor extends AbstractProcessor {
             "combiner")
         .addJavadoc(
             "Combines this path with another $L using a binary function.\n\n"
-                + "@param other the other path, which must be a $L; must not be null\n"
+                + "@param other the other path, which must be an instance of $L; must not be null\n"
                 + "@param combiner the combining function; must not be null\n"
                 + "@param <B> the other path's value type\n"
                 + "@param <C> the result type\n"
                 + "@return a new $L with the combined result\n"
-                + "@throws IllegalArgumentException if {@code other} is not a $L\n",
+                + "@throws IllegalArgumentException if {@code other} is not an instance of $L\n",
             pathClassName,
             pathClassName,
             pathClassName,

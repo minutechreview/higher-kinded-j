@@ -31,6 +31,18 @@ var program =
 
 ---
 
+## CompletableFuturePath
+
+**Definition:** A path over Java's `CompletableFuture<A>`: asynchronous work that completes with a value or fails with an exception. It adds recovery, timeouts and retry to the future. `join()` waits for the result, and `run()` returns the underlying future.
+
+**Factories:** `Path.future(future)`, `Path.futureCompleted(value)`, `Path.futureFailed(exception)` and `Path.futureAsync(supplier)`.
+
+**Operations:** `map`, `via`, `recover`, `withTimeout`, `completeOnTimeout`, `race` and `withRetry`.
+
+**Related:** [CompletableFuture Monad](../monads/cf_monad.md), [Migration Cookbook (Recipe 4)](../effect/migration_cookbook.md#recipe-4-completablefuture-nesting-to-completablefuturepath), [Path](#path), [VTaskPath](#vtaskpath), [Retry](concurrency.md#retry)
+
+---
+
 ## @ComposeEffects
 
 **Definition:** An annotation processor that generates composition infrastructure for multiple effect algebras: `Inject` instances, a composed `Functor`, and a `BoundSet` for program construction. Annotate a record whose fields are declared `Class<XOp<?>>`, each naming an `@EffectAlgebra`.
@@ -285,6 +297,28 @@ public record PaymentEffects(
 
 ---
 
+## EitherOrBothPath
+
+**Definition:** A path over `EitherOrBoth<L, A>`: a success that can also carry non-fatal warnings. A `Left` is fatal, a `Right` is clean, and a `Both` is a value with warnings.
+
+**Factories:** `Path.right(value, semigroup)`, `Path.left(error, semigroup)` and `Path.both(warnings, value, semigroup)`. The shortcuts `Path.rightNel(value)`, `Path.leftNel(error)` and `Path.bothNel(warning, value)` use a `NonEmptyList` for the warnings.
+
+**Operations:** `map`, `via`, `warnings()`, `isBoth()`, `toEitherPathDroppingWarnings()` and `toEitherPathFailingOnWarnings()`.
+
+**Related:** [EitherOrBothPath documentation](../effect/path_either_or_both.md), [Path](#path), [EitherOrBoth](data-effects.md#eitherorboth), [Semigroup](type-classes.md#semigroup)
+
+---
+
+## EitherPath
+
+**Definition:** A path over `Either<E, A>` for a computation that succeeds with a value or fails with a typed error `E`. The first failure stops the chain, and `run()` returns the `Either`.
+
+**Factories:** `Path.right(value)`, `Path.left(error)`, and `Path.either(either)`.
+
+**Related:** [EitherPath documentation](../effect/path_either.md), [Path](#path), [Either](data-effects.md#either), [Railway-Oriented Programming](#railway-oriented-programming), [recover](#recover)
+
+---
+
 ## foldMap
 
 **Definition:** The method that interprets a Free monad program by traversing its instruction tree, applying a natural transformation (interpreter) to each `Suspend` node, and combining results using the target monad's `flatMap`. Stack-safe via internal trampolining.
@@ -330,6 +364,42 @@ var program =
 **When to Use:** When you need to build programs that can be interpreted in multiple ways, inspected before execution, or composed from multiple effect algebras.
 
 **Related:** [foldMap](#foldmap), [Effect Algebra](#effect-algebra), [EitherF](#eitherf)
+
+---
+
+## FreeApPath
+
+**Definition:** A Path over `FreeAp<F, A>`: an applicative program whose structure can be analysed before it runs. It has no `via`, because no step may depend on another's result.
+
+**Factories:** `Path.freeApPure(a, functor)`, `Path.freeApLift(fa, functor)` and `Path.freeAp(freeAp, functor)`.
+
+**Operations:** `map`, `peek`, `zipWith` and `zipWith3`; `foldMap(interpreter, monad)` interprets it into a `GenericPath`, and `toFreeAp()` returns the `FreeAp`.
+
+**Related:** [FreeApPath documentation](../effect/path_freeap.md), [Path](#path), [Free Applicative](type-classes.md#free-applicative), [FreePath](#freepath), [Interpreter (Effect Handler)](#interpreter-effect-handler)
+
+---
+
+## FreePath
+
+**Definition:** A Path over `Free<F, A>`: a program written as data, to be run later by an interpreter. It is the way to build a DSL with the Path API.
+
+**Factories:** `Path.freePure(a, functor)`, `Path.freeLift(fa, functor)` and `Path.free(free, functor)`.
+
+**Operations:** `map`, `via`, `then`, `recover`, `attempt()`; `foldMap(interpreter, monad)` interprets it into a `GenericPath`, and `toFree()` returns the `Free`. `recover` and `attempt()` catch an error only when the target monad is a `MonadError`.
+
+**Related:** [FreePath documentation](../effect/path_free.md), [Path](#path), [Free Monad](#free-monad), [Interpreter (Effect Handler)](#interpreter-effect-handler), [foldMap](#foldmap)
+
+---
+
+## GenericPath
+
+**Definition:** A Path over any monad you supply, as `Kind<F, A>` with its `Monad<F>`. It is the escape hatch for a type that has no Path of its own.
+
+**Factories:** `Path.generic(kind, monad)` and `Path.genericPure(a, monad)`. Both take a plain `Monad`, so `recover` on the result throws. `GenericPath.of(kind, monadError)` builds one that can recover.
+
+**Operations:** `map`, `via`, `recover`, `supportsRecovery()`, `toMaybePath(narrower)`, `toEitherPath(narrower)`; `runKind()` returns the `Kind`.
+
+**Related:** [GenericPath documentation](../effect/path_generic.md), [Path](#path), [Monad](type-classes.md#monad), [MonadError](type-classes.md#monaderror), [mapK](#mapk)
 
 ---
 
@@ -390,6 +460,18 @@ public class IOConsoleInterpreter extends ConsoleOpInterpreter<IOKind.Witness> {
 
 ---
 
+## IOPath
+
+**Definition:** A path over `IO<A>`: a side effect that is described now and run later. Nothing happens until `unsafeRun()` is called. `run()` returns the underlying `IO` without running it.
+
+**Factories:** `Path.io(supplier)`, `Path.ioRunnable(runnable)`, `Path.ioPure(value)` and `Path.ioPath(io)`.
+
+**Operations:** `map`, `via`, `handleError`, `guarantee`, `withRetry` and `withTimeout`.
+
+**Related:** [IOPath documentation](../effect/path_io.md), [Path](#path), [IO](data-effects.md#io), [Retry](concurrency.md#retry), [Bracket Pattern](concurrency.md#bracket-pattern)
+
+---
+
 ## LazyPath
 
 **Definition:** A path for a deferred, memoised computation. The value is evaluated on first access and cached for subsequent access.
@@ -431,6 +513,16 @@ record ReadLine<A>(Function<String, A> k) implements ConsoleOp<A> {
 **Why It Matters:** Enables the generated Functor to map over instructions without cast-through. Each record knows how to transform its own continuation, keeping type safety throughout the chain.
 
 **Related:** [Effect Algebra](#effect-algebra), [Continuation-Passing Style](#continuation-passing-style-cps)
+
+---
+
+## MaybePath
+
+**Definition:** A path over `Maybe<A>` for a value that may be absent. Absence is its only failure, so it has no error value, and `run()` returns the `Maybe`.
+
+**Factories:** `Path.just(value)`, `Path.nothing()`, and `Path.maybe(value)` for either a nullable value or an existing `Maybe`.
+
+**Related:** [MaybePath documentation](../effect/path_maybe.md), [Path](#path), [Maybe](data-effects.md#maybe), [OptionalPath](#optionalpath), [EitherPath](#eitherpath)
 
 ---
 
@@ -573,6 +665,18 @@ EitherPath<AppError, BigDecimal> balance =
 
 ---
 
+## ReaderPath
+
+**Definition:** A path over `Reader<R, A>`: a computation that needs an environment `R` to produce its value. It gives dependency injection without a framework. Nothing runs until `run(env)` supplies the environment.
+
+**Factories:** `Path.reader(reader)`, `Path.readerPure(value)`, `Path.ask()` and `Path.asks(f)`.
+
+**Operations:** `map`, `via`, `local(f)` and `magnify(...)`. `run(env)` returns the value.
+
+**Related:** [ReaderPath documentation](../effect/advanced_effects.md#readerpath-the-environment-you-inherit), [Path](#path), [IdPath](#idpath), [Reader](data-effects.md#reader), [Reader Documentation](../monads/reader_monad.md)
+
+---
+
 ## recover
 
 **Definition:** The error recovery operation on Effect Paths, equivalent to `handleErrorWith` on MonadError. Allows switching from the failure track back to the success track by providing an alternative value or computation.
@@ -614,6 +718,18 @@ EitherPath<ApiError, User> partial = fetchUser(id)
 - Selective error recovery based on error type
 
 **Related:** [Effect Path](#effect-path), [Railway-Oriented Programming](#railway-oriented-programming), [via](#via)
+
+---
+
+## TrampolinePath
+
+**Definition:** A path over `Trampoline<A>`: a stack-safe recursive computation. Deep recursion runs in a loop instead of growing the call stack. `run()` returns the value.
+
+**Factories:** `Path.trampolineDone(value)`, `Path.trampolineDefer(supplier)` and `Path.trampoline(trampoline)`.
+
+**Operations:** `map`, `via` and `toLazyPath()`.
+
+**Related:** [TrampolinePath documentation](../effect/path_trampoline.md), [Path](#path), [LazyPath](#lazypath), [Trampoline Documentation](../monads/trampoline_monad.md)
 
 ---
 
@@ -674,6 +790,42 @@ VTask<Either<OrderError, OrderResult>> carrier = process(req).run();    // execu
 **Two channels, kept apart:** a business failure travels in the value channel as `Left`, whilst an unexpected defect stays on the `VTask` channel. The outcome-aware structured-concurrency combinators (`firstSuccess`, `allSucceed`, `allSucceedAccumulating`, `withTimeout`, `bracketOutcome`) preserve that split, and the `with*` resilience combinators are railway-aware.
 
 **Related:** [VResultPath](../effect/path_vresult.md), [Path](#path), [Railway-Oriented Programming](#railway-oriented-programming), [Either](data-effects.md#either), [Resilience Combinators](concurrency.md#resilience-combinators)
+
+---
+
+## VTaskPath
+
+**Definition:** A path over `VTask<A>`: a deferred computation that runs on a virtual thread. It suits I/O-bound work that needs to scale. `unsafeRun()` runs it, `runAsync()` returns a future, and `run()` returns the underlying `VTask`.
+
+**Factories:** `Path.vtask(callable)`, `Path.vtaskExec(runnable)`, `Path.vtaskPure(value)`, `Path.vtaskFail(throwable)` and `Path.vtaskPath(vtask)`.
+
+**Operations:** `map`, `via`, `handleError`, `timeout`, `withRetry`, `withCircuitBreaker` and `withBulkhead`.
+
+**Related:** [VTaskPath documentation](../effect/path_vtask.md), [Path](#path), [VResultPath](#vresultpath), [Virtual Thread](concurrency.md#virtual-thread), [Resilience Combinators](concurrency.md#resilience-combinators)
+
+---
+
+## WithStatePath
+
+**Definition:** A path over `State<S, A>`: a computation that threads a state through its steps. Each step can read or replace the state. Nothing runs until it is given an initial state.
+
+**Factories:** `Path.state(state)`, `Path.statePure(value)`, `Path.getState()`, `Path.setState(newState)` and `Path.modifyState(f)`.
+
+**Operations:** `map` and `via`. `run(s0)` returns a `StateTuple`, `evalState(s0)` returns the value and `execState(s0)` returns the final state.
+
+**Related:** [WithStatePath documentation](../effect/advanced_effects.md#withstatepath-computation-with-memory), [Path](#path), [State](data-effects.md#state), [State Documentation](../monads/state_monad.md)
+
+---
+
+## WriterPath
+
+**Definition:** A path over `Writer<W, A>`: a computation that returns a value together with an accumulated log. A `Monoid<W>` combines the log entries as the steps run.
+
+**Factories:** `Path.writer(writer, monoid)`, `Path.writerPure(value, monoid)` and `Path.tell(log, monoid)`.
+
+**Operations:** `map` and `via`; `censor(f)` rewrites the log, and `listen(additionalLog)` appends to it. `value()` and `written()` read the two parts, and `run()` returns the `Writer`.
+
+**Related:** [WriterPath documentation](../effect/advanced_effects.md#writerpath-accumulating-output), [Path](#path), [Writer](data-effects.md#writer), [Monoid](type-classes.md#monoid), [Writer Documentation](../monads/writer_monad.md)
 
 ---
 

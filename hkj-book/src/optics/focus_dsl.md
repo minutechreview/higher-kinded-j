@@ -59,11 +59,11 @@ You arrive holding a field, not an optic type. Find its declaration in the table
 |---|---|---|
 | [`Customer customer`](focus_navigation.md#fluent-navigation-with-generated-navigators), a record with `@GenerateFocus` | a navigator, which is also a `FocusPath<Basket, Customer>` | `.email()` |
 | `String reference` | `FocusPath<Basket, String>` | `.get(basket)`, `.set(value, basket)`, `.modify(f, basket)` |
-| [`List<LineItem> lines`](focus_navigation.md#collection-navigation), or a `Set` or `Collection` | `TraversalPath<Basket, LineItem>`, already on the elements | `.via(LineItemFocus.quantity())` |
+| [`List<LineItem> lines`](focus_navigation.md#collection-navigation), or a `Set` or `Collection` | a navigator, which is also a `TraversalPath<Basket, LineItem>`, already on the elements | `.quantity()` |
 | [`Optional<String> giftMessage`](focus_navigation.md#some-unwrap-optional) | `AffinePath<Basket, String>` | `.getOptional(basket)` |
 | [`@Nullable String couponCode`](focus_navigation.md#nullable-handle-null-values), with a recognised `@Nullable` | `AffinePath<Basket, String>` | `.getOptional(basket)` |
 | [`String legacyNote`](focus_navigation.md#nullable-handle-null-values), which may hold null but is not annotated | `FocusPath<Basket, String>` | `.nullable()` |
-| [`Map<String, String> attributes`](focus_navigation.md#access-by-index) | `FocusPath<Basket, Map<String, String>>`, by default | `.atKey("channel")` |
+| [`Map<String, String> attributes`](focus_navigation.md#access-by-index) | `FocusPath<Basket, Map<String, String>>`, by default | `.via(FocusPaths.mapAt("channel"))` |
 | [`String[] tags`](focus_navigation.md#eacheach-traverse-with-a-custom-each-instance) | `FocusPath<Basket, String[]>`, by default | `.each(EachInstances.arrayEach())` |
 | [`Either<String, String> approvedBy`](focus_navigation.md#someaffine-navigate-spi-container-types), or a `Maybe`, `Try` or `Validated` | `AffinePath<Basket, String>`, on the success side | `.getOptional(basket)` |
 | [`Payment payment`](focus_navigation.md#working-with-sum-types-using-instanceof), a sealed interface | `FocusPath<Basket, Payment>` | `.via(PaymentPrisms.card())`, or `.via(AffinePath.instanceOf(Card.class))` |
@@ -112,7 +112,7 @@ The generated companion has one method per record component, and the field's *ty
 
 ### Chain with `.via()` {#chain-with-via}
 
-Paths compose with `.via()`. Composing a path with a wider one widens the result, so one focus joined to many focuses is many focuses, and anything joined to a traversal is a traversal:
+Paths compose with `.via()`. Composing a path with a wider one widens the result, so one focus joined to many focuses is many focuses, and anything joined to a traversal is a traversal. The navigator `OrderFocus.lines().sku()` is this same path, written as a method call:
 
 ``` java
 {{#include ../../../hkj-examples/src/main/java/org/higherkindedj/example/book/optics/focus/FocusDslBook.java:chained}}
@@ -169,7 +169,7 @@ Focus DSL provides three path types, one for each answer to "how many values doe
 ~~~admonish warning title="Set on an absent focus writes anyway"
 `set` through an `AffinePath` is not conditional. `CustomerProfileFocus.nickname().set(x, profile)` on a profile with no nickname returns a profile *with* that nickname, because the last step's setter rebuilds the present case unconditionally. As `Affine.set`'s javadoc puts it, an affine makes an absent focus present when its last step can build the value and every step before that is present. `modify` is the operation that no-ops on an absent focus.
 
-The rule is positional. A miss at the *last* step writes through and creates the focus when that step can build the value (a prism, `.some()`, `.nullable()`). A miss at an *earlier* step of a multi-step path skips the whole set, because `Affine.andThen(Affine)` does guard. When absence must be preserved, reach for `modify`, or test with `matches` first.
+The rule is positional. A miss at the *last* step writes through and creates the focus when that step can build the value (a prism, `.some(FocusPaths.optionalSome())`, `.nullable()`). A miss at an *earlier* step of a multi-step path skips the whole set, because `Affine.andThen(Affine)` does guard. When absence must be preserved, reach for `modify`, or test with `matches` first.
 ~~~
 
 ### TraversalPath: Zero or More Elements
@@ -215,9 +215,9 @@ Where this lives: [AffinePath: Zero or One Element](#affinepath-zero-or-one-elem
 ~~~
 
 ~~~admonish success title="Answer and why" collapsible=true id="check-focus-types-answer"
-**A navigator for `Address`, so `.city()` chains straight on; a `FocusPath<Consignment, ConsignmentState>`, because a sealed field is not narrowed until a prism picks a variant; and an `AffinePath<CustomerProfile, EmailAddress>`.**
+**A navigator for `Address`, so `.city()` chains straight on; a `FocusPath<Consignment, ConsignmentState>`, because a sealed field is not narrowed until a prism picks a variant; and a navigator for `EmailAddress`.** That last is an `AffinePath<CustomerProfile, EmailAddress>`, on which `.value()` chains.
 
-Where this lives: [Find your field](#find-your-field).
+Where this lives: [Find your field](#find-your-field), and [Which fields get a navigator](focus_navigation.md#which-fields-get-a-navigator).
 ~~~
 
 ---
@@ -237,7 +237,7 @@ Where this lives: [Find your field](#find-your-field).
 
 ~~~admonish tip title="See Also"
 - [Collections, Optionals and Sealed Types](focus_navigation.md): collection navigation, `.via()` composition, and generated navigators
-- [Type Class and Effect Integration](focus_effects.md): `modifyF()`, `foldMap()`, `traverseOver()`, and Effect path bridging
+- [Type Class and Effect Integration](focus_effects.md): `modifyF()`, `foldMap()`, `EachInstances.fromTraverse()`, and Effect path bridging
 - [Custom Containers and Code Generation](focus_containers.md): generated class structure, SPI container types, and registration
 - [Focus DSL Reference](focus_reference.md): decision guide, common patterns, pitfalls, and FAQ
 ~~~

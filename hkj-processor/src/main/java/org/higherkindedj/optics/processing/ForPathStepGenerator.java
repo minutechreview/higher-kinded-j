@@ -4,6 +4,7 @@ package org.higherkindedj.optics.processing;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.Locale;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.Element;
 
@@ -616,16 +617,18 @@ final class ForPathStepGenerator {
     sb.append(">> newComp =\n");
     sb.append("        ").append(monadVar).append(".flatMap(\n");
     sb.append("            t -> ").append(monadVar).append(".map(\n");
-    sb.append("                ").append(nextType.toLowerCase()).append(" -> Tuple.of(");
+    sb.append("                ").append(nextType.toLowerCase(Locale.ROOT)).append(" -> Tuple.of(");
     for (int i = 0; i < n; i++) {
       sb.append("t._").append(i + 1).append("(), ");
     }
-    sb.append(nextType.toLowerCase()).append("),\n");
+    sb.append(nextType.toLowerCase(Locale.ROOT)).append("),\n");
 
     // The widen/runKind expression
     sb.append("                ");
     if (desc.isGeneric || desc.isFree) {
       sb.append("next.apply(t).runKind()");
+    } else if (needsLocalMonad(desc)) {
+      sb.append("ForPath.eitherStep(next.apply(t))");
     } else {
       sb.append(desc.kindHelperField).append(".widen(next.apply(t).run())");
     }
@@ -750,14 +753,14 @@ final class ForPathStepGenerator {
     sb.append("                matcher\n");
     sb.append("                    .apply(t)\n");
     sb.append("                    .map(")
-        .append(nextType.toLowerCase())
+        .append(nextType.toLowerCase(Locale.ROOT))
         .append(" -> ")
         .append(m)
         .append(".of(Tuple.of(");
     for (int i = 0; i < n; i++) {
       sb.append("t._").append(i + 1).append("(), ");
     }
-    sb.append(nextType.toLowerCase()).append(")))\n");
+    sb.append(nextType.toLowerCase(Locale.ROOT)).append(")))\n");
     sb.append("                    .orElseGet(").append(m).append("::zero),\n");
     sb.append("            this.computation);\n");
 
@@ -858,6 +861,8 @@ final class ForPathStepGenerator {
       sb.append("                ");
       if (desc.isGeneric || desc.isFree) {
         sb.append("f").append(i + 1).append(".apply(t).runKind()");
+      } else if (needsLocalMonad(desc)) {
+        sb.append("ForPath.eitherStep(f").append(i + 1).append(".apply(t))");
       } else {
         sb.append(desc.kindHelperField).append(".widen(f").append(i + 1).append(".apply(t).run())");
       }
@@ -1172,14 +1177,24 @@ final class ForPathStepGenerator {
     }
   }
 
-  /** Gets the path type for from() parameter, e.g. "MaybePath<G>" or "EitherPath<E, G>". */
+  /**
+   * Gets the path type a from() or par() step returns, e.g. "MaybePath<G>". An EitherPath step may
+   * fail with a subtype of the comprehension's error type, as in {@code EitherPath.via}, so its
+   * type is "? extends EitherPath<? extends E, G>".
+   */
   private static String fromReturnPathType(PathTypeDescriptor desc, String nextType) {
     if (desc.isFree) {
       return "FreePath<F, " + nextType + ">";
     } else if (desc.isGeneric) {
       return "GenericPath<F, " + nextType + ">";
     } else if (desc.hasExtraTypeParam) {
-      return desc.pathTypeName + "<" + desc.extraTypeParamName + ", " + nextType + ">";
+      return "? extends "
+          + desc.pathTypeName
+          + "<? extends "
+          + desc.extraTypeParamName
+          + ", "
+          + nextType
+          + ">";
     } else {
       return desc.pathTypeName + "<" + nextType + ">";
     }

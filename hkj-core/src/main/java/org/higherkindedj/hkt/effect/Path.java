@@ -1259,7 +1259,11 @@ public final class Path {
   /**
    * Creates a StreamPath from an existing Stream.
    *
-   * <p>Note: The stream is materialised for reusability.
+   * <p>The stream is read completely when this method is called, before any terminal operation. The
+   * source must be finite. For very large or infinite sources, use {@link
+   * Path#streamIterate(Object, UnaryOperator)}, {@link StreamPath#generate(Supplier)} or {@link
+   * StreamPath#fromSupplier(Supplier)} and limit the result with {@link StreamPath#take(long)} or
+   * {@link StreamPath#takeWhile(java.util.function.Predicate)}.
    *
    * @param stream the stream to wrap; must not be null, and must not contain null
    * @param <A> the element type
@@ -1517,8 +1521,12 @@ public final class Path {
    * <pre>{@code
    * // With a registered custom effect type
    * Kind<ApiResultKind.Witness, User> kind = apiService.getUser(id);
-   * Optional<Chainable<User>> path = Path.from(kind, ApiResultKind.Witness.class);
+   * Optional<Chainable<?, User>> path = Path.from(kind, ApiResultKind.Witness.class);
    * }</pre>
+   *
+   * <p>The registry knows only that a provider returns a {@link Chainable}, so the result's family
+   * is open: it can be mapped, but not chained or combined. Where the effect type is known, build
+   * its Path directly, as in {@code GenericPath.of(kind, monad)}, to keep the family and chain.
    *
    * @param kind the Kind value to wrap; must not be null
    * @param witnessType the witness type class
@@ -1529,7 +1537,7 @@ public final class Path {
    * @see org.higherkindedj.hkt.effect.spi.PathRegistry
    * @see org.higherkindedj.hkt.effect.spi.PathProvider
    */
-  public static <F extends WitnessArity<TypeArity.Unary>, A> Optional<Chainable<A>> from(
+  public static <F extends WitnessArity<TypeArity.Unary>, A> Optional<Chainable<?, A>> from(
       Kind<F, A> kind, Class<?> witnessType) {
     Objects.requireNonNull(kind, "kind must not be null");
     Objects.requireNonNull(witnessType, "witnessType must not be null");

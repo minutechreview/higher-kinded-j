@@ -109,7 +109,7 @@ class NavigatorCoverageTest {
 
       assertThat(compilation).succeeded();
 
-      // The navigator for Inner should show AffinePath for Optional<String> note via .some()
+      // The navigator for Inner should show AffinePath for Optional<String> note via .some(...)
       assertGeneratedCodeContains(
           compilation, "com.example.OuterFocus", "AffinePath<S, String> note()");
     }
@@ -143,7 +143,7 @@ class NavigatorCoverageTest {
 
       assertThat(compilation).succeeded();
 
-      // The navigator for Inner should show TraversalPath for List<String> tags via .each()
+      // The navigator for Inner should show TraversalPath for List<String> tags via .each(...)
       assertGeneratedCodeContains(
           compilation, "com.example.OuterFocus", "TraversalPath<S, String> tags()");
     }
@@ -181,10 +181,10 @@ class NavigatorCoverageTest {
       // Plain field → FocusPath in navigator
       assertGeneratedCodeContains(
           compilation, "com.example.AccountFocus", "FocusPath<S, String> bio()");
-      // Optional field → AffinePath in navigator via .some()
+      // Optional field → AffinePath in navigator via .some(FocusPaths.optionalSome())
       assertGeneratedCodeContains(
           compilation, "com.example.AccountFocus", "AffinePath<S, String> motto()");
-      // List field → TraversalPath in navigator via .each()
+      // List field → TraversalPath in navigator via .each(EachInstances.listEach())
       assertGeneratedCodeContains(
           compilation, "com.example.AccountFocus", "TraversalPath<S, String> hobbies()");
     }
@@ -195,7 +195,8 @@ class NavigatorCoverageTest {
   class BuildViaStatementWidening {
 
     @Test
-    @DisplayName("should generate .some() widening for Optional non-navigable field in navigator")
+    @DisplayName(
+        "should generate .some(FocusPaths.optionalSome()) widening for Optional non-navigable field in navigator")
     void shouldGenerateSomeWideningInNavigator() {
       final JavaFileObject innerSource =
           JavaFileObjects.forSourceString(
@@ -229,7 +230,8 @@ class NavigatorCoverageTest {
     }
 
     @Test
-    @DisplayName("should generate .each() widening for List non-navigable field in navigator")
+    @DisplayName(
+        "should generate .each(EachInstances.listEach()) widening for List non-navigable field in navigator")
     void shouldGenerateEachWideningInNavigator() {
       final JavaFileObject innerSource =
           JavaFileObjects.forSourceString(
@@ -263,7 +265,8 @@ class NavigatorCoverageTest {
     }
 
     @Test
-    @DisplayName("should generate .each() widening for Set field in navigator")
+    @DisplayName(
+        "should generate .each(EachInstances.setEach()) widening for Set field in navigator")
     void shouldGenerateEachWideningForSetInNavigator() {
       final JavaFileObject innerSource =
           JavaFileObjects.forSourceString(
@@ -440,6 +443,16 @@ class NavigatorCoverageTest {
                 @GenerateFocus(generateNavigators = true)
                 public record Outer(String name, @Nullable Inner inner) {}
                 """;
+            case "optional" ->
+                """
+                @GenerateFocus(generateNavigators = true)
+                public record Outer(String name, Optional<Inner> inner) {}
+                """;
+            case "list" ->
+                """
+                @GenerateFocus(generateNavigators = true)
+                public record Outer(String name, List<Inner> inner) {}
+                """;
             default ->
                 """
                 @GenerateFocus(generateNavigators = true, widenFields = "inner")
@@ -450,7 +463,9 @@ class NavigatorCoverageTest {
           "com.example.Outer",
           """
           package com.example;
+          import java.util.List;
           import java.util.Map;
+          import java.util.Optional;
           import org.higherkindedj.optics.annotations.GenerateFocus;
           import org.jspecify.annotations.Nullable;
           """
@@ -480,7 +495,9 @@ class NavigatorCoverageTest {
       "count, traversal, TraversalPath",
       "isEmpty, traversal, TraversalPath",
       "toLens, affine, AffinePath",
-      "nullable, traversal, TraversalPath"
+      "nullable, traversal, TraversalPath",
+      "matches, optional, AffinePath",
+      "count, list, TraversalPath"
     })
     @DisplayName(
         "a field named like a path method that takes arguments, or that the tier lacks,"
@@ -506,7 +523,9 @@ class NavigatorCoverageTest {
       "nullable, affine, AffinePath",
       "headOption, traversal, TraversalPath",
       "toTraversal, traversal, TraversalPath",
-      "head, traversal, TraversalPath"
+      "head, traversal, TraversalPath",
+      "toAffine, optional, AffinePath",
+      "head, list, TraversalPath"
     })
     @DisplayName("a field named like a no-argument path method is refused at the navigating field")
     void aFieldNamedLikeANoArgumentMethodIsRefused(String field, String shape, String path) {
@@ -534,6 +553,10 @@ class NavigatorCoverageTest {
                   + " 'inner' a plain path.")
           .inFile(holder)
           .onLineContaining(" inner)");
+      // The refusal is the one diagnostic: a form the same field would cost is not noted as well.
+      Assertions.assertThat(compilation.notes())
+          .extracting(note -> note.getMessage(null))
+          .noneMatch(note -> note.contains("Form"));
     }
   }
 
@@ -1025,7 +1048,10 @@ class NavigatorCoverageTest {
       assertThat(compilation).succeeded();
       assertGeneratedCodeContains(
           compilation, "com.example.BundleFocus", "TraversalPath<Bundle, String> notes()");
-      assertGeneratedCodeContains(compilation, "com.example.BundleFocus", ".some().each()");
+      assertGeneratedCodeContains(
+          compilation,
+          "com.example.BundleFocus",
+          ".some(FocusPaths.optionalSome()).each(EachInstances.listEach())");
       assertGeneratedCodeContains(
           compilation, "com.example.ShipmentFocus", "TraversalPath<S, String> notes()");
       assertGeneratedCodeContains(
@@ -1082,7 +1108,7 @@ class NavigatorCoverageTest {
       assertThat(compilation).succeeded();
 
       // Raw Optional: no inner type argument to infer from, so the focus falls back to Object,
-      // which is what the static method's .some() already reported.
+      // which is what the static method's widening already reported.
       assertGeneratedCodeContains(
           compilation, "com.example.WideRootFocus", "AffinePath<S, Object> rawOpt()");
       assertGeneratedCodeContains(

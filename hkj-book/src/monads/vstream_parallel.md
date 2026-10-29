@@ -97,6 +97,10 @@ VStream<Integer> doubled = VStreamPar.parEvalMap(
 // Output order matches input order
 ```
 
+A concurrency at least as large as the stream, even `Integer.MAX_VALUE`, still processes
+every element and forks one task per element. The batch list grows as elements arrive, so
+that concurrency does not reserve a slot for every place in it.
+
 ### parEvalMapUnordered: Maximum Throughput
 
 When output order does not matter, `parEvalMapUnordered` emits results as they
@@ -125,6 +129,9 @@ VStream<Integer> processed = VStreamPar.parEvalMapUnordered(
 );
 // Results may be in any order
 ```
+
+A concurrency at least as large as the stream still emits every element. Its batch list
+grows as elements arrive, as `parEvalMap`'s does.
 
 ### parEvalFlatMap: Parallel Stream Expansion
 
@@ -185,13 +192,21 @@ inserts or batch API calls.
 
 ### chunk(size)
 
-Groups elements into lists of at most `size` elements. The last chunk may have fewer:
+Groups elements into non-empty lists of at most `size` elements. The last chunk may have fewer:
 
 <!-- verify -->
 ```java
-VStream<List<Integer>> chunks = VStream.range(1, 11).chunk(3);
-// [[1,2,3], [4,5,6], [7,8,9], [10]]
+VStream<NonEmptyList<Integer>> chunks = VStream.range(1, 11).chunk(3);
+// four chunks: 1 to 3, 4 to 6, 7 to 9, then 10 alone
 ```
+
+Each chunk is a [`NonEmptyList`](nonemptylist_monad.md), because a chunk is only emitted once it
+holds an element. So `head()`, `reduce` and `max` on a chunk always give a value, with no empty
+case to handle. An empty stream gives no chunks.
+
+A size at least as large as the stream, even `Integer.MAX_VALUE`, still yields one chunk of
+every element. The batch list grows as elements arrive, so that size does not reserve a slot
+for every place in it.
 
 ### chunkWhile(predicate)
 
@@ -200,19 +215,21 @@ grouping sorted data:
 
 <!-- verify -->
 ```java
-VStream<List<Integer>> groups = VStream.of(1, 1, 2, 2, 2, 3)
+VStream<NonEmptyList<Integer>> groups = VStream.of(1, 1, 2, 2, 2, 3)
     .chunkWhile(Integer::equals);
-// [[1,1], [2,2,2], [3]]
+// three groups: 1, 1 then 2, 2, 2 then 3
 ```
 
 ### mapChunked(size, batchFn)
 
-Combines chunking, batch transformation, and flattening into a single operation:
+Combines chunking, batch transformation, and flattening into a single operation. The batch
+function receives each chunk as a `NonEmptyList`, so pass `batch.toJavaList()` to an API that
+takes a `List`:
 
 <!-- verify -->
 ```java
 VStream<InsertResult> results = recordStream.mapChunked(100, batch -> {
-    return db.batchInsert(batch); // Process 100 records at a time
+    return db.batchInsert(batch.toJavaList()); // Process 100 records at a time
 });
 ```
 
@@ -247,7 +264,7 @@ bulk I/O operations:
 VStream<List<InsertResult>> results = VStreamPar.parEvalMap(
     recordStream.chunk(100), // Group into batches of 100
     4,                       // Process 4 batches concurrently
-    batch -> VTask.of(() -> db.batchInsert(batch))
+    batch -> VTask.of(() -> db.batchInsert(batch.toJavaList()))
 );
 ```
 

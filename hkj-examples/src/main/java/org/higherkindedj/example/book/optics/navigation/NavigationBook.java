@@ -17,7 +17,6 @@ import org.higherkindedj.example.book.optics.cast.Consignment;
 import org.higherkindedj.example.book.optics.cast.ConsignmentFocus;
 import org.higherkindedj.example.book.optics.cast.ConsignmentLenses;
 import org.higherkindedj.example.book.optics.cast.LineItem;
-import org.higherkindedj.example.book.optics.cast.LineItemFocus;
 import org.higherkindedj.example.book.optics.cast.Order;
 import org.higherkindedj.example.book.optics.cast.OrderFocus;
 import org.higherkindedj.example.book.optics.cast.OrderLenses;
@@ -32,6 +31,7 @@ import org.higherkindedj.optics.each.EachInstances;
 import org.higherkindedj.optics.extensions.EachExtensions;
 import org.higherkindedj.optics.focus.AffinePath;
 import org.higherkindedj.optics.focus.FocusPath;
+import org.higherkindedj.optics.focus.FocusPaths;
 import org.higherkindedj.optics.focus.TraversalPath;
 import org.higherkindedj.optics.indexed.Pair;
 import org.higherkindedj.optics.util.ListPrisms;
@@ -50,12 +50,13 @@ public final class NavigationBook {
 
   static List<List<LineItem>> eachGenerated(Order order) {
     // ANCHOR: each_generated
-    // Generated: FocusPath.of(lens).each()
+    // Generated: FocusPath.of(lens).each(EachInstances.listEach())
     TraversalPath<Order, LineItem> allLines = OrderFocus.lines();
     List<LineItem> lines = allLines.getAll(order);
 
-    // Applying .each() yourself, starting from the lens to the whole list
-    TraversalPath<Order, LineItem> sameThing = FocusPath.of(OrderLenses.lines()).each();
+    // Applying the Each yourself, starting from the lens to the whole list
+    TraversalPath<Order, LineItem> sameThing =
+        FocusPath.of(OrderLenses.lines()).each(EachInstances.listEach());
     // ANCHOR_END: each_generated
     return List.of(lines, sameThing.getAll(order));
   }
@@ -86,15 +87,16 @@ public final class NavigationBook {
   static Indexed byIndex(Order order, PriceList priceList) {
     // ANCHOR: by_index
     // A List field: start from the lens, because the generated path is element-level
-    AffinePath<Order, LineItem> firstLine = FocusPath.of(OrderLenses.lines()).at(0);
+    AffinePath<Order, LineItem> firstLine =
+        FocusPath.of(OrderLenses.lines()).via(FocusPaths.listAt(0));
     Optional<LineItem> first = firstLine.getOptional(order); // empty if out of bounds
 
     // Or narrow the generated traversal to its first element. Mind the asymmetry:
     // headOption reads the first element but writes to all of them
     AffinePath<Order, LineItem> alsoFirst = OrderFocus.lines().headOption();
 
-    // A Map field: the generated path still focuses the whole map, so .atKey() applies
-    AffinePath<PriceList, BigDecimal> lamp = PriceListFocus.prices().atKey("LAMP");
+    // A Map field: the generated path still focuses the whole map, so mapAt applies
+    AffinePath<PriceList, BigDecimal> lamp = PriceListFocus.prices().via(FocusPaths.mapAt("LAMP"));
     Optional<BigDecimal> lampPrice = lamp.getOptional(priceList);
     // ANCHOR_END: by_index
     return new Indexed(first, alsoFirst, lampPrice);
@@ -167,18 +169,36 @@ public final class NavigationBook {
     return List.of(city, same);
   }
 
-  /** What the page's navigator-or-via block reads. */
-  record NavigatorOrVia(String email, List<String> skus) {}
+  /** What the page's navigator-hops block reads. */
+  record NavigatorHops(String email, List<String> skus) {}
 
-  static NavigatorOrVia navigatorOrVia(Order order) {
-    // ANCHOR: navigator_or_via
-    // customer is a plain navigable field: navigator, so .email() chains
+  static NavigatorHops navigatorHops(Order order) {
+    // ANCHOR: navigator_hops
+    // customer is a navigable record: a navigator, so .email() chains
     String email = OrderFocus.customer().email().value().get(order);
 
-    // lines is a List: a TraversalPath, so the next hop is .via()
-    List<String> skus = OrderFocus.lines().via(LineItemFocus.sku()).getAll(order);
-    // ANCHOR_END: navigator_or_via
-    return new NavigatorOrVia(email, skus);
+    // lines is a List of them: a navigator over every line, so .sku() chains too
+    TraversalPath<Order, String> skuPath = OrderFocus.lines().sku();
+    List<String> skus = skuPath.getAll(order);
+    // ANCHOR_END: navigator_hops
+    return new NavigatorHops(email, skus);
+  }
+
+  /** What the page's wider-hop block reads. */
+  record WiderHop(List<BigDecimal> prices, List<String> emails) {}
+
+  static WiderHop widerHop(OrderHistory history) {
+    // ANCHOR: wider_hop
+    // A hop into each order's list keeps the traversal, so lines() hands on its navigator
+    List<BigDecimal> prices = OrderHistoryFocus.orders().lines().price().getAll(history);
+
+    // A hop into one customer lands on a traversal too, so customer() hands on the traversal
+    // form of the order's customer navigator, and the chain goes on
+    OrderFocus.CustomerNavigator.TraversalForm<OrderHistory> customers =
+        OrderHistoryFocus.orders().customer();
+    List<String> emails = customers.email().value().getAll(history);
+    // ANCHOR_END: wider_hop
+    return new WiderHop(prices, emails);
   }
 
   /** What the page's path-methods block computes, and the postcodes its trace saw. */
@@ -317,6 +337,13 @@ record PaymentHistory(UUID customerId, List<Payment> payments) {}
 record Stockroom(String name, Map<String, Integer> stock, Either<String, String> verifiedName) {}
 
 // ANCHOR_END: stockroom
+
+// ANCHOR: order_history
+// A customer's past orders: a list of orders, each holding a list of lines
+@GenerateFocus
+record OrderHistory(List<Order> orders) {}
+
+// ANCHOR_END: order_history
 
 // Width proofs for the nested-container table: the components are placeholders, with no role.
 

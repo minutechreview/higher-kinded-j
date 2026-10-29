@@ -461,13 +461,16 @@ public class UserService {
 public Either<DomainError, OrderResult> processOrder(String userId, OrderRequest req) {
     return findUser(userId)
         .via(user -> validateOrder(req)
-            .mapError(DomainError.Validation::new)
+            .<DomainError>mapError(DomainError.Validation::new)
             .via(order -> chargePayment(user, order)      // nested: `user` is still in scope
                 .mapError(DomainError.PaymentFailed::new)))
         .map(payment -> new OrderResult(payment.id()))
         .run();
 }
 ```
+
+`.<DomainError>mapError` types the inner chain by `DomainError`, not `DomainError.Validation`, so the
+payment step's `PaymentFailed` fits it.
 
 ---
 
@@ -776,6 +779,6 @@ section above).
 
 ## Requirements
 
-- Spring Boot 4.0.1+ for the server side (Jackson 3.x / `tools.jackson` namespace)
-- Spring Boot 4.1+ / Spring Framework 7 for the `@HkjHttpClient` client side (it uses `@ImportHttpServices` and the `spring.http.serviceclient.*` binding from `spring-boot-restclient`)
+- Spring Boot 4.1.0+, which manages Jackson 3 (the `tools.jackson` namespace).
+- `@HkjHttpClient` needs no extra dependency: the starter brings `spring-boot-restclient`, which binds the `spring.http.serviceclient.*` properties and applies them to the client groups.
 - Java 25 with `--enable-preview`
